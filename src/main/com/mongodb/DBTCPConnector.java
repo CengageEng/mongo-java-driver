@@ -211,7 +211,8 @@ public class DBTCPConnector implements DBConnector {
         catch ( IOException ioe ){
             mp.error( port , ioe );
             retry = retries > 0 && !coll._name.equals( "$cmd" )
-                    && !(ioe instanceof SocketTimeoutException) && _error( ioe, slaveOk );
+                    /* && !(ioe instanceof SocketTimeoutException) */
+                    && _error( ioe, slaveOk );
             if ( !retry ){
                 throw new MongoException.Network( "can't call something" , ioe );
             }
@@ -370,6 +371,10 @@ public class DBTCPConnector implements DBConnector {
             _requestPort = null;
 //            _logger.log( Level.SEVERE , "MyPort.error called" , e );
 
+            // remove this port from the pool if there was a socket timeout, as it's most likely a dead connection
+            if( e instanceof SocketTimeoutException )
+            	p.getPool().remove(p);
+            
             // depending on type of error, may need to close other connections in pool
             p.getPool().gotError(e);
         }

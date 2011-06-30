@@ -190,12 +190,11 @@ public class DBPortPool extends SimplePool<DBPort> {
             return;
         }
 
-        // XXX JSS: Commenting this out to actually clear the port pool on socket timeout exceptions
-/*        if ( e instanceof java.net.SocketTimeoutException ){
+        if ( e instanceof java.net.SocketTimeoutException ){
             // we don't want to clear the port pool for a connection timing out
             return;
         }
-*/        
+        
         Bytes.LOGGER.log( Level.WARNING , "emptying DBPortPool to " + getServerAddress() + " b/c of error" , e );
 
         // force close all sockets 
