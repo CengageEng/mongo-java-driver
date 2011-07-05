@@ -372,8 +372,10 @@ public class DBTCPConnector implements DBConnector {
 //            _logger.log( Level.SEVERE , "MyPort.error called" , e );
 
             // remove this port from the pool if there was a socket timeout, as it's most likely a dead connection
-            if( e instanceof SocketTimeoutException )
+            if( e instanceof SocketTimeoutException ){
+            	_logger.log( Level.SEVERE, "Removed dead port from pool due to socket timeout." );
             	p.getPool().remove(p);
+            }
             
             // depending on type of error, may need to close other connections in pool
             p.getPool().gotError(e);
