@@ -210,9 +210,16 @@ public class DBTCPConnector implements DBConnector {
         }
         catch ( IOException ioe ){
             mp.error( port , ioe );
-            retry = retries > 0 && !coll._name.equals( "$cmd" )
-                    /* && !(ioe instanceof SocketTimeoutException) */
-                    && _error( ioe, slaveOk );
+
+            // retry all commands in the case of socket timeout exceptions (obeying retry count)
+            if( ioe instanceof SocketTimeoutException ){
+            	retry = retries > 0;
+            }
+            // this is the original driver logic for retries
+            else {
+                retry = retries > 0 && !coll._name.equals( "$cmd" ) && _error( ioe, slaveOk );
+            }
+            
             if ( !retry ){
                 throw new MongoException.Network( "can't call something" , ioe );
             }
