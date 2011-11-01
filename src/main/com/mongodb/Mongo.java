@@ -19,7 +19,10 @@
 package com.mongodb;
 
 import java.net.UnknownHostException;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collection;
+import java.util.List;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 
@@ -96,13 +99,9 @@ import org.bson.io.PoolOutputBuffer;
  */
 public class Mongo {
 
-    /**
-     *
-     */
+    // Make sure you don't change the format of these two lines. A preprocessing regexp
+    // is applied and updates the version based on configuration in build.properties.
     public static final int MAJOR_VERSION = 2;
-    /**
-     *
-     */
     public static final int MINOR_VERSION = 7;
 
     static int cleanerIntervalMS;
@@ -476,8 +475,31 @@ public class Mongo {
     }
 
     /**
-     * makes it possible to run read queries on slave nodes
+     * Sets the read preference for this database. Will be used as default for
+     * reads from any collection in any database. See the
+     * documentation for {@link ReadPreference} for more information.
+     *
+     * @param preference Read Preference to use
      */
+    public void setReadPreference( ReadPreference preference ){
+        _readPref = preference;
+    }
+
+    /**
+     * Gets the default read preference
+     * @return
+     */
+    public ReadPreference getReadPreference(){
+        return _readPref;
+    }
+
+    /**
+     * makes it possible to run read queries on slave nodes
+     *
+     * @deprecated Replaced with ReadPreference.SECONDARY
+     * @see com.mongodb.ReadPreference.SECONDARY
+     */
+    @Deprecated
     public void slaveOk(){
         addOption( Bytes.QUERYOPTION_SLAVEOK );
     }
@@ -517,6 +539,7 @@ public class Mongo {
      * Helper method for setting up MongoOptions at instantiation
      * so that any options which affect this connection can be set.
      */
+    @SuppressWarnings("deprecation")
     void _applyMongoOptions() {
         if (_options.slaveOk) slaveOk();
         setWriteConcern( _options.getWriteConcern() );
@@ -548,6 +571,7 @@ public class Mongo {
     final DBTCPConnector _connector;
     final ConcurrentMap<String,DB> _dbs = new ConcurrentHashMap<String,DB>();
     private WriteConcern _concern = WriteConcern.NORMAL;
+    private ReadPreference _readPref = ReadPreference.PRIMARY;
     final Bytes.OptionHolder _netOptions = new Bytes.OptionHolder( null );
     final DBCleanerThread _cleaner;
 
@@ -693,16 +717,15 @@ public class Mongo {
 
     @Override
     public String toString() {
-        String str = "Mongo: ";
+        StringBuilder str = new StringBuilder("Mongo: ");
         List<ServerAddress> list = getServerAddressList();
-        if (list == null || list.isEmpty())
-            str += "null";
+        if (list == null || list.size() == 0)
+            str.append("null");
         else {
-            for (ServerAddress addr : list) {
-                str += addr.toString() + ",";
-            }
-            str = str.substring(0, str.length() - 1);
+            for ( ServerAddress addr : list )
+                str.append( addr.toString() ).append( ',' );
+            str.deleteCharAt( str.length() - 1 );
         }
-        return str;
+        return str.toString();
     }
 }
