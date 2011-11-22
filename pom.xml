@@ -5,75 +5,94 @@
     <modelVersion>4.0.0</modelVersion>
 
     <groupId>mongo-java-driver</groupId>
-    <artifactId>mongo-java-driver</artifactId>
-    <version>1.0-SNAPSHOT</version>
-    <packaging>pom</packaging>
+    <artifactId>mongo</artifactId>
+    <version>2.7.0-rc3-CENGAGE</version>
+    <packaging>jar</packaging>
+    <name>mongo-java-driver</name>
     <properties>
         <build.conf.lib.version>2.7.0-rc3-CENGAGE</build.conf.lib.version>
         <build.conf.lib.major>2</build.conf.lib.major>
         <build.conf.lib.minor>7</build.conf.lib.minor>
     </properties>
+    <dependencies>
+        <dependency>
+            <groupId>org</groupId>
+            <artifactId>testng</artifactId>
+            <version>0.9.2</version>
+            <scope>system</scope>
+            <systemPath>${project.basedir}/lib/testng-5.8-jdk15.jar</systemPath>
+        </dependency>
+    </dependencies>
+    <distributionManagement>
+        <!-- repo for artifact distribution -->
+        <repository>
+            <id>pipeline-release</id>
+            <name>Pipeline release repository</name>
+            <url>http://pipeeng.corp.local/nexus/content/groups/pipeline-approved-repos/</url>
+        </repository>
+        <!-- repo for SNAPSHOT artifact distribution -->
+        <snapshotRepository>
+            <id>pipeline-production-snapshot</id>
+            <name>Pipeline Development Repository</name>
+            <url>http://pipeeng.corp.local/nexus/content/repositories/pipeline-production-snapshot/</url>
+        </snapshotRepository>
+    </distributionManagement>
     <build>
         <plugins>
             <plugin>
-		<groupId>org.apache.maven.plugins</groupId>
-                <artifactId>maven-antrun-plugin</artifactId>
-                <version>1.7</version>
+                <artifactId>maven-compiler-plugin</artifactId>
+                <version>2.3.2</version>
+                <configuration>
+                    <debug>true</debug>
+                    <encoding>UTF-8</encoding>
+                </configuration>
+            </plugin>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-source-plugin</artifactId>
+                <version>2.1.2</version>
+                <configuration>
+                </configuration>
+            </plugin>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-surefire-plugin</artifactId>
+                <version>2.10</version>
+                <configuration>
+                    <includes>
+                        <include>**/*Test.java</include>
+                        <include>**/Test*.java</include>
+                        <include>**/*TestCase.java</include>
+                    </includes>
+                </configuration>
+            </plugin>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-javadoc-plugin</artifactId>
+                <version>2.8</version>
+                <configuration>
+                    <encoding>UTF-8</encoding>
+                </configuration>
+            </plugin>
+            <plugin>
+                <groupId>org.codehaus.mojo</groupId>
+                <artifactId>properties-maven-plugin</artifactId>
+                <version>1.0-alpha-1</version>
                 <executions>
                     <execution>
-                        <id>initialize</id>
                         <phase>initialize</phase>
-                        <configuration>
-                            <target>
-                                <ant antfile="build.xml" target="init" >
-                                </ant>
-                            </target>
-                        </configuration>
                         <goals>
-                            <goal>run</goal>
+                            <goal>read-project-properties</goal>
                         </goals>
-                    </execution>
-                    <execution>
-                        <id>clean</id>
-                        <phase>clean</phase>
                         <configuration>
-                            <target>
-				<ant antfile="build.xml" target="clean" >
-				</ant>
-                            </target>
+                            <files>
+                                <file>${basedir}/build.properties</file>
+                            </files>
                         </configuration>
-                        <goals>
-                            <goal>run</goal>
-                        </goals>
-                    </execution>
-                    <execution>
-                        <id>compile</id>
-                        <phase>compile</phase>
-                        <configuration>
-                            <target>
-                                <ant antfile="build.xml" target="compile" >
-                                </ant>
-                            </target>
-                        </configuration>
-                        <goals>
-                            <goal>run</goal>
-                        </goals>
-                    </execution>
-                    <execution>
-                        <id>package</id>
-                        <phase>package</phase>
-                        <configuration>
-                            <target>
-                                <ant antfile="build.xml" target="alljars" >
-                                </ant>
-                            </target>
-                        </configuration>
-                        <goals>
-                            <goal>run</goal>
-                        </goals>
                     </execution>
                 </executions>
             </plugin>
         </plugins>
+        <sourceDirectory>src/main</sourceDirectory>
     </build>
 </project>
