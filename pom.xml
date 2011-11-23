@@ -26,9 +26,9 @@
     <distributionManagement>
         <!-- repo for artifact distribution -->
         <repository>
-            <id>pipeline-release</id>
-            <name>Pipeline release repository</name>
-            <url>http://pipeeng.corp.local/nexus/content/groups/pipeline-approved-repos/</url>
+            <id>pipeline-3rdparty-artifact</id>
+            <name>Pipeline 3rdparty repository</name>
+            <url>http://pipeeng.corp.local/nexus/content/repositories/pipeline-3rdparty-artifact/</url>
         </repository>
         <!-- repo for SNAPSHOT artifact distribution -->
         <snapshotRepository>
