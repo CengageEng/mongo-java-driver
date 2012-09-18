@@ -18,19 +18,18 @@
 
 package com.mongodb;
 
+import com.mongodb.util.ThreadUtil;
+
 import java.io.BufferedInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.net.InetSocketAddress;
 import java.net.Socket;
-import java.util.Collections;
 import java.util.Map;
-import java.util.WeakHashMap;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.logging.Level;
 import java.util.logging.Logger;
-
-import com.mongodb.util.ThreadUtil;
 
 /**
  * represents a Port to the database, which is effectively a single connection to a server
@@ -55,7 +54,7 @@ public class DBPort {
         this( addr , null , new MongoOptions() );
     }
     
-    DBPort( ServerAddress addr  , DBPortPool pool , MongoOptions options ){
+    DBPort( ServerAddress addr, DBPortPool pool, MongoOptions options ){
         _options = options;
         _sa = addr;
         _addr = addr.getSocketAddress();
@@ -71,12 +70,8 @@ public class DBPort {
         return go( msg, coll );
     }
 
-    Response call( OutMessage msg , DBCollection coll , DBDecoder decoder) throws IOException{
-        return go( msg, coll, false, null, decoder);
-    }
-
-    Response call( OutMessage msg , DBCollection coll , ReadPreference readPref , DBDecoder decoder) throws IOException{
-        return go( msg, coll, false, readPref, decoder);
+    Response call(OutMessage msg, DBCollection coll, DBDecoder decoder) throws IOException{
+        return go( msg, coll, false, decoder);
     }
     
     void say( OutMessage msg )
@@ -86,14 +81,14 @@ public class DBPort {
     
     private synchronized Response go( OutMessage msg , DBCollection coll )
         throws IOException {
-        return go( msg , coll , false, null, null );
+        return go( msg , coll , false, null );
     }
 
     private synchronized Response go( OutMessage msg , DBCollection coll , DBDecoder decoder ) throws IOException{
-        return go( msg, coll, false, null, decoder );
+        return go( msg, coll, false, decoder );
     }
 
-    private synchronized Response go( OutMessage msg , DBCollection coll , boolean forceReponse , ReadPreference readPref, DBDecoder decoder)
+    private synchronized Response go(OutMessage msg, DBCollection coll, boolean forceResponse, DBDecoder decoder)
         throws IOException {
 
         if ( _processingResponse ){
@@ -116,12 +111,13 @@ public class DBPort {
 
         try {
             msg.prepare();
+            _activeState = new ActiveState(msg);
             msg.pipe( _out );
-            
+
             if ( _pool != null )
                 _pool._everWorked = true;
             
-            if ( coll == null && ! forceReponse )
+            if ( coll == null && ! forceResponse )
                 return null;
             
             _processingResponse = true;
@@ -132,6 +128,7 @@ public class DBPort {
             throw ioe;
         }
         finally {
+            _activeState = null;
             _processingResponse = false;
         }
     }
@@ -142,28 +139,17 @@ public class DBPort {
     }
 
     synchronized private Response findOne( DB db , String coll , DBObject q ) throws IOException {
-        OutMessage msg = OutMessage.query( db._mongo , 0 , db.getName() + "." + coll , 0 , -1 , q , null );
-        Response res = go( msg , db.getCollection( coll ) , DefaultDBDecoder.FACTORY.create() );
-        return res;
-    }
-
-    synchronized private Response findOne( String ns , DBObject q ) throws IOException{
-        OutMessage msg = OutMessage.query( null , 0 , ns , 0 , -1 , q , null );
-        Response res = go( msg , null , true, null, DefaultDBDecoder.FACTORY.create()  );
+        OutMessage msg = OutMessage.query( db.getCollection(coll) , 0 , 0 , -1 , q , null );
+        Response res = go( msg , db.getCollection( coll ) , null );
         return res;
     }
 
     synchronized CommandResult runCommand( DB db , DBObject cmd ) throws IOException {
-        Response res = findOne( db , "$cmd" , cmd );
-        return convertToCR( res );
+        Response res = findOne(db, "$cmd", cmd);
+        return convertToCommandResult(cmd, res);
     }
 
-    synchronized CommandResult runCommand( String db , DBObject cmd ) throws IOException {
-        Response res = findOne( db + ".$cmd" , cmd );
-        return convertToCR( res );
-    }
-
-    private CommandResult convertToCR(Response res) {
+    private CommandResult convertToCommandResult(DBObject cmd, Response res) {
         if ( res.size() == 0 )
             return null;
         if ( res.size() > 1 )
@@ -173,7 +159,7 @@ public class DBPort {
         if ( data == null )
             throw new MongoInternalException( "something is wrong, no command result" );
 
-        CommandResult cr = new CommandResult(res.serverUsed());
+        CommandResult cr = new CommandResult(cmd, res.serverUsed());
         cr.putAll( data );
         return cr;
     }
@@ -182,7 +168,7 @@ public class DBPort {
         if ( last != _calls )
             return null;
         
-        return getLastError( db , concern );
+        return getLastError(db, concern);
     }
 
     /**
@@ -216,7 +202,7 @@ public class DBPort {
             try {
                 _socket = _options.socketFactory.createSocket();
                 _socket.connect( _addr , _options.connectTimeout );
-                
+
                 _socket.setTcpNoDelay( ! USE_NAGLE );
                 _socket.setKeepAlive( _options.socketKeepAlive );
                 _socket.setSoTimeout( _options.socketTimeout );
@@ -279,6 +265,14 @@ public class DBPort {
         close();
     }
 
+    ActiveState getActiveState() {
+        return _activeState;
+    }
+
+    int getLocalPort() {
+        return _socket != null ? _socket.getLocalPort() : -1;
+    }
+
     /**
      * closes the underlying connection and streams
      */
@@ -300,7 +294,8 @@ public class DBPort {
     }
     
     void checkAuth( DB db ) throws IOException {
-        if ( db._username == null ){
+        DB.AuthenticationCredentials credentials = db.getAuthenticationCredentials();
+        if ( credentials == null ){
             if ( db._name.equals( "admin" ) )
                 return;
             checkAuth( db._mongo.getDB( "admin" ) );
@@ -309,14 +304,12 @@ public class DBPort {
         if ( _authed.containsKey( db ) )
             return;
         
-        CommandResult res = runCommand( db , new BasicDBObject( "getnonce" , 1 ) );
+        CommandResult res = runCommand( db , credentials.getNonceCommand() );
         res.throwOnError();
         
-        DBObject temp = db._authCommand( res.getString( "nonce" ) );
-        
-        res = runCommand( db , temp );
+        res = runCommand( db , credentials.getAuthCommand( res.getString( "nonce" ) ) );
+        res.throwOnError();
 
-        res.throwOnError();
         _authed.put( db , true );
     }
 
@@ -342,9 +335,21 @@ public class DBPort {
 
     private boolean _processingResponse;
 
-    private Map<DB,Boolean> _authed = Collections.synchronizedMap( new WeakHashMap<DB,Boolean>() );
+    private Map<DB,Boolean> _authed = new ConcurrentHashMap<DB, Boolean>( );
     int _lastThread;
     long _calls = 0;
+    private volatile ActiveState _activeState;
+
+    class ActiveState {
+       ActiveState(final OutMessage outMessage) {
+           this.outMessage = outMessage;
+           this.startTime = System.nanoTime();
+           this.threadName = Thread.currentThread().getName();
+       }
+       final OutMessage outMessage;
+       final long startTime;
+       final String threadName;
+    }
 
     private static Logger _rootLogger = Logger.getLogger( "com.mongodb.port" );
 }

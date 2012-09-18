@@ -1,4 +1,47 @@
 
+2.7.3 / 2012-01-30 
+==================
+
+  * synchronized access to encoder/decoder
+  * JAVA-505: Made encoder creation work just like decoder creation
+    + using cached DBDecoder in most cases to avoid excessive memory allocation caused by too many instances of DefaultDBDecoder being created
+  * JAVA-505 / JAVA-421 - Regression in performance of Java Driver should be rolled back (GC Related)
+
+2.7.3RC1 / 2012-01-17 
+==================
+
+  * Remove defunct BSONInputTest
+  * JAVA-505 / JAVA-421 - Regression in performance of Java Driver should be rolled back (GC Related)
+
+2.7.2 / 2011-11-10 
+==================
+
+  * JAVA-469: java.net.NetworkInterface.getNetworkInterfaces may fail with IBM JVM, which prevents from using driver
+  * deprecated replica pair constructors. 
+    - updated javadocs and removed replica pair javadocs in class doc.
+  * JAVA-428: Fixed an issue where read preferences not set on cursor
+
+2.7.1 / 2011-11-08 
+==================
+
+  * JAVA-467 - added _check call to getServerAddress if _it is null 
+  * JAVA-467 - Moved variable calls to method to fix read preference hierarchy 
+  * simplified getServerAddress method.
+
+2.7.0 / 2011-11-04 
+===================
+
+ * Released Java Driver 2.7.0
+ * See change notes from Release Candidate series
+ * Please report any bugs or issues to https://jira.mongodb.org/browse/JAVA
+
+
+2.7.0-rc4 / 2011-11-03 
+=======================
+
+  * New Secondary Selection tests for Replica Sets introduced
+  * To correct a regression, make WriteConcern immutable (Otherwise you can mutate static presets like SAFE at runtime) * Reintroduced constructors which accept continueOnErrorForInsert args * To enable you to set continueOnErrorForInsert with the presets like SAFE, immutable "new WriteConcern like this with COEI changed" method added.
+
 2.7.0-rc3 / 2011-10-31 
 =======================
 

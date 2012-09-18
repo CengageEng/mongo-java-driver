@@ -16,13 +16,13 @@
 
 package com.mongodb;
 
-import java.io.IOException;
-import java.util.List;
-
-import org.bson.types.*;
+import com.mongodb.util.TestCase;
+import org.bson.types.ObjectId;
+import org.testng.Assert;
 import org.testng.annotations.Test;
 
-import com.mongodb.util.TestCase;
+import java.io.IOException;
+import java.util.List;
 
 public class DBCollectionTest extends TestCase {
 
@@ -48,8 +48,37 @@ public class DBCollectionTest extends TestCase {
         c.insert(new DBObject[] {inserted1,inserted2});
     }
 
-    /*
-    TODO: fix... build is broken.
+    @Test(groups = {"basic"})
+    public void testCappedCollection() {
+        String collectionName = "testCapped";
+        int collectionSize = 1000;
+        
+        DBCollection c = _db.getCollection(collectionName);
+        c.drop();
+        
+        DBObject options = new BasicDBObject("capped", true);
+        options.put("size", collectionSize);
+        c = _db.createCollection(collectionName, options);
+        
+        assertEquals(c.isCapped(), true);
+    }
+    
+    @Test(groups = {"basic"})
+    public void testDuplicateKeyException() {
+        DBCollection c = _db.getCollection("testDuplicateKey");
+        c.drop();
+        
+        DBObject obj = new BasicDBObject();
+        c.insert(obj, WriteConcern.SAFE);
+        try {
+           c.insert(obj, WriteConcern.SAFE);
+           Assert.fail();
+        }
+        catch (MongoException.DuplicateKey e) {
+           // Proves that a DuplicateKey exception is thrown, as test will fail if any other exception is thrown
+        }
+    }
+
     @Test(groups = {"basic"})
     public void testFindOne() {
         DBCollection c = _db.getCollection("test");
@@ -92,7 +121,43 @@ public class DBCollectionTest extends TestCase {
         assertEquals(obj.containsField("x"), false);
         assertEquals(obj.get("y"), 2);
     }
-    */
+    
+    @Test
+    public void testFindOneSort(){
+    	
+    	DBCollection c = _db.getCollection("test");
+    	c.drop();
+    	
+        DBObject obj = c.findOne();
+        assertEquals(obj, null);
+
+        c.insert(BasicDBObjectBuilder.start().add("_id", 1).add("x", 100).add("y", "abc").get());
+        c.insert(BasicDBObjectBuilder.start().add("_id", 2).add("x", 200).add("y", "abc").get()); //max x
+        c.insert(BasicDBObjectBuilder.start().add("_id", 3).add("x", 1).add("y", "abc").get());
+        c.insert(BasicDBObjectBuilder.start().add("_id", 4).add("x", -100).add("y", "xyz").get()); //min x
+        c.insert(BasicDBObjectBuilder.start().add("_id", 5).add("x", -50).add("y", "zzz").get());  //max y
+        c.insert(BasicDBObjectBuilder.start().add("_id", 6).add("x", 9).add("y", "aaa").get());  //min y
+        c.insert(BasicDBObjectBuilder.start().add("_id", 7).add("x", 1).add("y", "bbb").get());
+      
+        //only sort
+        obj = c.findOne(new BasicDBObject(), null, new BasicDBObject("x", 1) );
+        assertNotNull(obj);
+        assertEquals(4, obj.get("_id"));
+        
+        obj = c.findOne(new BasicDBObject(), null, new BasicDBObject("x", -1));
+        assertNotNull(obj);
+        assertEquals(obj.get("_id"), 2);
+        
+        //query and sort
+        obj = c.findOne(new BasicDBObject("x", 1), null, BasicDBObjectBuilder.start().add("x", 1).add("y", 1).get() );
+        assertNotNull(obj);
+        assertEquals(obj.get("_id"), 3);
+        
+        obj = c.findOne( QueryBuilder.start("x").lessThan(2).get(), null, BasicDBObjectBuilder.start().add("y", -1).get() );
+        assertNotNull(obj);
+        assertEquals(obj.get("_id"), 5);
+        
+    }
 
     /**
      * This was broken recently. Adding test.
@@ -240,26 +305,18 @@ public class DBCollectionTest extends TestCase {
         DBObject inserted2 = BasicDBObjectBuilder.start("_id", id).add("x",3).add("y",4).get();
         DBObject inserted3 = BasicDBObjectBuilder.start().add("x",5).add("y",6).get();
         WriteResult r = c.insert(inserted1,inserted2, inserted3);
-        System.err.println( "Count: " + c.count()  + " WriteConcern: " + c.getWriteConcern() );
+        assertEquals(1, c.count());
+        assertFalse(c.getWriteConcern().getContinueOnErrorForInsert());
 
-        System.err.println( " Continue on Error? " + c.getWriteConcern().getContinueOnErrorForInsert() );
-        for (DBObject doc : c.find(  )) {
-            System.err.println( doc );
-        }
         assertEquals( c.count(), 1);
     }
 
-
     @Test
-    public void mongodIsVersion20Plus() {
-        String version = (String) _db.command("serverStatus").get("version");
-        System.err.println("Connected to MongoDB Version '" + version + "'");
-        assert(Double.parseDouble(version.substring(0, 3)) >= 2.0);
-    }
-
-    @Test(dependsOnMethods = { "mongodIsVersion20Plus" })
     public void testMultiInsertWithContinue() {
-        
+        if (!serverIsAtLeastVersion(2.0)) {
+            return;
+        }
+    
         DBCollection c = _db.getCollection("testmultiinsertWithContinue");
         c.drop();
 
@@ -270,9 +327,13 @@ public class DBCollectionTest extends TestCase {
         DBObject inserted1 = BasicDBObjectBuilder.start("_id", id).add("x",1).add("y",2).get();
         DBObject inserted2 = BasicDBObjectBuilder.start("_id", id).add("x",3).add("y",4).get();
         DBObject inserted3 = BasicDBObjectBuilder.start().add("x",5).add("y",6).get();
-        WriteConcern wc = new WriteConcern();
-        wc.setContinueOnErrorForInsert(true);
-        WriteResult r = c.insert(wc, inserted1, inserted2, inserted3);
+        WriteConcern newWC = WriteConcern.SAFE.continueOnErrorForInsert(true);
+        try {
+            c.insert(newWC, inserted1, inserted2, inserted3);
+            fail("Insert should have failed");
+        } catch (MongoException e) {
+            assertEquals(11000, e.getCode());
+        }
         assertEquals( c.count(), 2 );
     }
 
@@ -284,7 +345,6 @@ public class DBCollectionTest extends TestCase {
         DBObject obj = BasicDBObjectBuilder.start().add("x",1).add("y",2).add("foo.bar","baz").get();
         c.insert(obj);
     }
-
 
     final DB _db;
 

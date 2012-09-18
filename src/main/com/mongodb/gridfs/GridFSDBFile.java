@@ -53,6 +53,7 @@ public class GridFSDBFile extends GridFSFile {
      * @param filename the file name on disk
      * @return
      * @throws IOException
+     * @throws MongoException 
      */
     public long writeTo( String filename ) throws IOException {
         return writeTo( new File( filename ) );
@@ -62,9 +63,18 @@ public class GridFSDBFile extends GridFSFile {
      * @param f the File object
      * @return
      * @throws IOException
+     * @throws MongoException 
      */
     public long writeTo( File f ) throws IOException {
-        return writeTo( new FileOutputStream( f ) );
+        
+    	FileOutputStream out = null;
+    	try{
+    		out = new FileOutputStream( f );
+    		return writeTo( out);
+    	}finally{
+    	    if(out != null)
+    	        out.close();
+    	}
     }
 
     /**
@@ -72,14 +82,15 @@ public class GridFSDBFile extends GridFSFile {
      * @param out the OutputStream
      * @return
      * @throws IOException
+     * @throws MongoException 
      */
     public long writeTo( OutputStream out )
-        throws IOException {
-        final int nc = numChunks();
-        for ( int i=0; i<nc; i++ ){
-            out.write( getChunk( i ) );
-        }
-        return _length;
+    		throws IOException {
+    	final int nc = numChunks();
+    	for ( int i=0; i<nc; i++ ){
+    	    out.write( getChunk( i ) );
+    	}
+    	return _length;
     }
     
     byte[] getChunk( int i ){
@@ -130,16 +141,15 @@ public class GridFSDBFile extends GridFSFile {
         public int read(byte[] b){
             return read( b , 0 , b.length );
         }
+
         public int read(byte[] b, int off, int len){
             
             if ( _data == null || _offset >= _data.length ){
-                
-                if ( _nextChunk >= _numChunks )
+                if ( _currentChunkIdx + 1 >= _numChunks )
                     return -1;
                 
-                _data = getChunk( _nextChunk );
+                _data = getChunk( ++_currentChunkIdx );
                 _offset = 0;
-                _nextChunk++;
             }
 
             int r = Math.min( len , _data.length - _offset );
@@ -148,10 +158,41 @@ public class GridFSDBFile extends GridFSFile {
             return r;
         }
 
+        /**
+         * Will smartly skips over chunks without fetching them if possible.
+         */
+        public long skip(long numBytesToSkip) throws IOException {
+            if (numBytesToSkip <= 0)
+                return 0;
+
+            if (_currentChunkIdx == _numChunks)
+                //We're actually skipping over the back end of the file, short-circuit here
+                //Don't count those extra bytes to skip in with the return value
+                return 0;
+
+            // offset in the whole file
+            long offsetInFile = 0;
+            if (_currentChunkIdx >= 0)
+                offsetInFile = _currentChunkIdx * _chunkSize + _offset;
+            if (numBytesToSkip + offsetInFile >= _length) {
+                _currentChunkIdx = _numChunks;
+                _data = null;
+                return _length - offsetInFile;
+            }
+
+            int temp = _currentChunkIdx;
+            _currentChunkIdx = (int)((numBytesToSkip + offsetInFile) / _chunkSize);
+            if (temp != _currentChunkIdx)
+                _data = getChunk(_currentChunkIdx);
+            _offset = (int)((numBytesToSkip + offsetInFile) % _chunkSize);
+
+            return numBytesToSkip;
+        }
+
         final int _numChunks;
 
-        int _nextChunk = 0;
-        int _offset;
+        int _currentChunkIdx = -1;
+        int _offset = 0;
         byte[] _data = null;
     }
     

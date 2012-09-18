@@ -17,37 +17,25 @@
 
 package com.mongodb;
 
-import java.io.IOException;
-import java.net.UnknownHostException;
-import java.nio.ByteBuffer;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.UUID;
-import java.util.regex.Pattern;
-
-import org.bson.BSON;
-import org.bson.Transformer;
-import org.bson.types.BSONTimestamp;
-import org.bson.types.Binary;
-import org.bson.types.Code;
-import org.bson.types.CodeWScope;
-import org.bson.types.MaxKey;
-import org.bson.types.MinKey;
-import org.bson.types.ObjectId;
-import org.testng.annotations.Test;
-
 import com.mongodb.util.JSON;
 import com.mongodb.util.TestCase;
 import com.mongodb.util.Util;
+import org.bson.BSON;
+import org.bson.Transformer;
+import org.bson.types.*;
+import org.testng.annotations.Test;
+
+import java.io.IOException;
+import java.net.UnknownHostException;
+import java.nio.ByteBuffer;
+import java.util.*;
+import java.util.regex.Pattern;
 
 public class JavaClientTest extends TestCase {
 
     public JavaClientTest()
         throws IOException , MongoException {
-        _mongo = new Mongo( "127.0.0.1" );
+        _mongo = new Mongo( "localhost" );
 	cleanupMongo = _mongo;
 	cleanupDB = "com_mongodb_unittest_JavaClientTest";
 	_db = cleanupMongo.getDB( cleanupDB );
@@ -484,7 +472,8 @@ public class JavaClientTest extends TestCase {
 
         MapReduceOutput out =
             c.mapReduce( "function(){ for ( var i=0; i<this.x.length; i++ ){ emit( this.x[i] , 1 ); } }" ,
-                         "function(key,values){ var sum=0; for( var i=0; i<values.length; i++ ) sum += values[i]; return sum;}" , null, MapReduceCommand.OutputType.INLINE, null);
+                         "function(key,values){ var sum=0; for( var i=0; i<values.length; i++ ) sum += values[i]; return sum;}" , 
+                         null, MapReduceCommand.OutputType.INLINE, null, ReadPreference.primaryPreferred());
 
         Map<String,Integer> m = new HashMap<String,Integer>();
         for ( DBObject r : out.results() ){
@@ -504,7 +493,13 @@ public class JavaClientTest extends TestCase {
     @Test
     @SuppressWarnings("deprecation")
     public void testMapReduceInlineSecondary() throws Exception {
-        Mongo mongo = new Mongo(Arrays.asList(new ServerAddress("127.0.0.1"), new ServerAddress("127.0.0.1", 27020)));
+        Mongo mongo = new Mongo(Arrays.asList(new ServerAddress("127.0.0.1", 27017), new ServerAddress("127.0.0.1", 27018)));
+
+        if (isStandalone(mongo)) {
+            return;
+        }
+
+        int size = getReplicaSetSize(mongo);
         DBCollection c = mongo.getDB(_db.getName()).getCollection( "imr2" );
         //c.setReadPreference(ReadPreference.SECONDARY);
         c.slaveOk();
@@ -513,8 +508,9 @@ public class JavaClientTest extends TestCase {
         c.save( new BasicDBObject( "x" , new String[]{ "a" , "b" } ) );
         c.save( new BasicDBObject( "x" , new String[]{ "b" , "c" } ) );
         WriteResult wr = c.save( new BasicDBObject( "x" , new String[]{ "c" , "d" } ) );
-        if(mongo.getReplicaSetStatus() != null  && mongo.getReplicaSetStatus().getName() != null)
-		wr.getLastError(WriteConcern.REPLICAS_SAFE);
+        if (mongo.getReplicaSetStatus() != null  && mongo.getReplicaSetStatus().getName() != null) {
+            wr.getLastError(new WriteConcern(size));
+        }
 
         MapReduceOutput out =
             c.mapReduce( "function(){ for ( var i=0; i<this.x.length; i++ ){ emit( this.x[i] , 1 ); } }" ,
@@ -564,6 +560,58 @@ public class JavaClientTest extends TestCase {
         assertEquals( 2 , m.get( "c" ).intValue() );
         assertEquals( 1 , m.get( "d" ).intValue() );
 
+    }
+    
+    @Test
+    public void testAggregation(){
+        if (!serverIsAtLeastVersion(2.1)) {
+            return;
+        }
+
+        DBCollection c = _db.getCollection( "aggregationTest" );
+        c.drop();
+        
+        DBObject foo = new BasicDBObject( "name" , "foo" ) ;
+        DBObject bar = new BasicDBObject( "name" , "bar" ) ;
+        DBObject baz = new BasicDBObject( "name" , "foo" ) ;
+        foo.put( "count", 5 );
+        bar.put( "count", 2 );
+        baz.put( "count", 7 );
+        c.insert( foo );
+        c.insert( bar );
+        c.insert( baz );
+        
+        DBObject projFields = new BasicDBObject( "name", 1 );
+        projFields.put("count", 1);
+        
+        List<DBObject> groupOperations = new ArrayList<DBObject>();
+        groupOperations.add(new BasicDBObject( ));
+        groupOperations.add(new BasicDBObject( "countPerName", new BasicDBObject( "$sum", 1 )));
+        DBObject group = new BasicDBObject( );
+        group.put("_id", "$name" );
+        group.put( "docsPerName", new BasicDBObject( "$sum", 1 ));
+        group.put( "countPerName", new BasicDBObject( "$sum", "$count" ));
+        
+        AggregationOutput out = c.aggregate( new BasicDBObject( "$project", projFields ), new BasicDBObject( "$group", group) );
+        
+        Map<String, DBObject> results = new HashMap<String, DBObject>();
+        for(DBObject result : out.results())
+            results.put((String)result.get("_id"), result);
+        
+        DBObject fooResult = results.get("foo");
+        assertNotNull(fooResult);
+        assertEquals(2, fooResult.get("docsPerName"));
+        assertEquals(12, fooResult.get("countPerName"));
+        
+        DBObject barResult = results.get("bar");
+        assertNotNull(barResult);
+        assertEquals(1, barResult.get("docsPerName"));
+        assertEquals(2, barResult.get("countPerName"));
+        
+       DBObject aggregationCommand = out.getCommand();
+       assertNotNull(aggregationCommand);
+       assertEquals(c.getName(), aggregationCommand.get("aggregate"));
+       assertNotNull(aggregationCommand.get("pipeline"));
     }
 
     String _testMulti( DBCollection c ){
@@ -704,19 +752,15 @@ public class JavaClientTest extends TestCase {
         }
         assertEquals( 0 , c.find().count() );
         c.insert( l );
-        assertEquals( num , c.find().count() );
+        assertEquals(num, c.find().count());
 
-        s = l.toString();
-        assertTrue( s.length() > maxObjSize );
-
-        boolean worked = false;
         try {
-            c.save( new BasicDBObject( "foo" , s ) );
-            worked = true;
+            c.save( new BasicDBObject( "foo" , new Binary(new byte[maxObjSize]) ) );
+            fail("Should not be able to save an object larger than maximum bson object size of " + maxObjSize);
         }
-        catch ( MongoException ie ){}
-        assertFalse( worked );
-
+        catch ( MongoInternalException ie ) {
+            assertEquals(-3, ie.getCode());
+        }
         assertEquals( num , c.find().count() );
     }
 
@@ -777,8 +821,8 @@ public class JavaClientTest extends TestCase {
         DBCollection c = _db.getCollection( "writeresult1" );
         c.drop();
 
-        WriteResult res = c.insert( new BasicDBObject( "_id" , 1 ) );
-        res = c.update( new BasicDBObject( "_id" , 1 ) , new BasicDBObject( "$inc" , new BasicDBObject( "x" , 1 ) ) );
+        c.insert( new BasicDBObject( "_id" , 1 ) );
+        WriteResult res = c.update( new BasicDBObject( "_id" , 1 ) , new BasicDBObject( "$inc" , new BasicDBObject( "x" , 1 ) ) );
         assertEquals( 1 , res.getN() );
         assertTrue( res.isLazy() );
 
@@ -854,18 +898,34 @@ public class JavaClientTest extends TestCase {
         assertEquals( 5 , dbObj.get( "x" ));
         assertNull( c.findOne(new BasicDBObject( "_id" , 1 ) ));
 
+        // create new one with upsert and return it
+        dbObj = c.findAndModify( new BasicDBObject( "_id" , 2 ) , null, null, false, new BasicDBObject("$set", new BasicDBObject("a", 6)), true, true);
+        assertEquals( 2 , dbObj.keySet().size());
+        assertEquals( 6 , dbObj.get( "a" ));
+        assertEquals( 6 , c.findOne(new BasicDBObject( "_id" , 2 ) ).get( "a" ));
+
+        // create new one with upsert and don't return it
+        dbObj = c.findAndModify( new BasicDBObject( "_id" , 3 ) , null, null, false, new BasicDBObject("$set", new BasicDBObject("b", 7)), false, true);
+        assertNull(dbObj);
+        assertEquals( 7 , c.findOne(new BasicDBObject( "_id" , 3 ) ).get( "b" ));
+
         // test exception throwing
         c.insert( new BasicDBObject( "a" , 1 ) );
         try {
-            dbObj = c.findAndModify( null, null );
-            assertTrue(false, "Exception not thrown when no update nor remove");
+            c.findAndModify( null, null );
+            fail("Exception not thrown when no update nor remove");
         } catch (MongoException e) {
         }
 
         try {
             dbObj = c.findAndModify( new BasicDBObject("a", "noexist"), null );
+            if (!serverIsAtLeastVersion(2.1)) {
+               assertNull(dbObj);
+            }
         } catch (MongoException e) {
-            assertTrue(false, "Exception thrown when matching record");
+            if (!serverIsAtLeastVersion(2.1)) {
+                fail("Exception thrown when matching record");
+            }
         }
     }
 

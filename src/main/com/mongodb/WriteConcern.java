@@ -18,6 +18,7 @@
 
 package com.mongodb;
 
+import java.io.Serializable;
 import java.lang.reflect.Field;
 import java.lang.reflect.Modifier;
 import java.util.HashMap;
@@ -44,7 +45,9 @@ import java.util.Map;
  *
  * @dochub databases
  */
-public class WriteConcern {
+public class WriteConcern implements Serializable {
+
+    private static final long serialVersionUID = 1884671104750417011L;
 
     /** No exceptions are raised, even for network issues */
     public final static WriteConcern NONE = new WriteConcern(-1);
@@ -146,10 +149,32 @@ public class WriteConcern {
      * @param j whether writes should wait for a journaling group commit
      */
     public WriteConcern( int w , int wtimeout , boolean fsync , boolean j ){
+        this( w, wtimeout, fsync, j, false);
+    }
+
+    /**
+     * Creates a WriteConcern object.
+     * <p>Specifies the number of servers to wait for on the write operation, and exception raising behavior </p>
+     *	<p> w represents the number of servers:
+     * 		<ul>
+     * 			<li>{@code w=-1} None, no checking is done</li>
+     * 			<li>{@code w=0} None, network socket errors raised</li>
+     * 			<li>{@code w=1} Checks server for errors as well as network socket errors raised</li>
+     * 			<li>{@code w>1} Checks servers (w) for errors as well as network socket errors raised</li>
+     * 		</ul>
+     * 	</p>
+     * @param w number of writes
+     * @param wtimeout timeout for write operation
+     * @param fsync whether or not to fsync
+     * @param j whether writes should wait for a journaling group commit
+     * @param continueOnInsertError if batch inserts should continue after the first error
+     */
+    public WriteConcern( int w , int wtimeout , boolean fsync , boolean j, boolean continueOnInsertError) {
         _w = w;
         _wtimeout = wtimeout;
         _fsync = fsync;
         _j = j;
+        _continueOnErrorForInsert = continueOnInsertError;
     }
 
     /**
@@ -169,16 +194,39 @@ public class WriteConcern {
      * @param j whether writes should wait for a journaling group commit
      */
     public WriteConcern( String w , int wtimeout , boolean fsync, boolean j ){
+        this( w, wtimeout, fsync, j, false);
+    }
+
+    /**
+     * Creates a WriteConcern object.
+     * <p>Specifies the number of servers to wait for on the write operation, and exception raising behavior </p>
+     *	<p> w represents the number of servers:
+     * 		<ul>
+     * 			<li>{@code w=-1} None, no checking is done</li>
+     * 			<li>{@code w=0} None, network socket errors raised</li>
+     * 			<li>{@code w=1} Checks server for errors as well as network socket errors raised</li>
+     * 			<li>{@code w>1} Checks servers (w) for errors as well as network socket errors raised</li>
+     * 		</ul>
+     * 	</p>
+     * @param w number of writes
+     * @param wtimeout timeout for write operation
+     * @param fsync whether or not to fsync
+     * @param j whether writes should wait for a journaling group commit
+     * @param continueOnInsertError if batch inserts should continue after the first error
+     * @return
+     */
+    public WriteConcern( String w , int wtimeout , boolean fsync, boolean j, boolean continueOnInsertError ){
+        if (w == null) {
+            throw new IllegalArgumentException("w can not be null");
+        }
+
         _w = w;
         _wtimeout = wtimeout;
         _fsync = fsync;
         _j = j;
+        _continueOnErrorForInsert = continueOnInsertError;
     }
 
-    /**
-     * Gets the object representing the "getlasterror" command
-     * @return
-     */
     public BasicDBObject getCommand(){
         BasicDBObject _command = new BasicDBObject( "getlasterror" , 1 );
 
@@ -199,7 +247,7 @@ public class WriteConcern {
 
     /**
      * Sets the w value (the write strategy)
-     * @param wValue
+     * @param w
      */
     public void setWObject(Object w) {
         if ( ! (w instanceof Integer) && ! (w instanceof String) )
@@ -213,14 +261,6 @@ public class WriteConcern {
      */
     public Object getWObject(){
         return _w;
-    }
-
-    /**
-     * Sets the w value (the write strategy)
-     * @param w
-     */
-    public void setW(int w) {
-        _w = w;
     }
 
     /**
@@ -240,27 +280,11 @@ public class WriteConcern {
     }
 
     /**
-     * Sets the write timeout (in milliseconds)
-     * @param wtimeout
-     */
-    public void setWtimeout(int wtimeout) {
-        this._wtimeout = wtimeout;
-    }
-
-    /**
      * Gets the write timeout (in milliseconds)
      * @return
      */
     public int getWtimeout(){
         return _wtimeout;
-    }
-
-    /**
-     * Sets the fsync flag (fsync to disk on the server)
-     * @param fsync
-     */
-    public void setFsync(boolean fsync) {
-        _fsync = fsync;
     }
 
     /**
@@ -331,20 +355,29 @@ public class WriteConcern {
     }
 
     @Override
-    public boolean equals( Object o ){
-        if ( this == o ) return true;
-        if ( o == null || getClass() != o.getClass() ) return false;
+    public boolean equals(Object o) {
+        if (this == o) return true;
+        if (o == null || getClass() != o.getClass()) return false;
 
         WriteConcern that = (WriteConcern) o;
-        return _fsync == that._fsync && _w == that._w && _wtimeout == that._wtimeout && _j == that._j && _continueOnErrorForInsert == that._continueOnErrorForInsert;
+
+        if (_continueOnErrorForInsert != that._continueOnErrorForInsert) return false;
+        if (_fsync != that._fsync) return false;
+        if (_j != that._j) return false;
+        if (_wtimeout != that._wtimeout) return false;
+        if (!_w.equals(that._w)) return false;
+
+        return true;
     }
 
-    /**
-     * Sets the j parameter (journal syncing)
-     * @param j
-     */
-    public void setJ(boolean j) {
-        this._j = j;
+    @Override
+    public int hashCode() {
+        int result = _w.hashCode();
+        result = 31 * result + _wtimeout;
+        result = 31 * result + (_fsync ? 1 : 0);
+        result = 31 * result + (_j ? 1 : 0);
+        result = 31 * result + (_continueOnErrorForInsert ? 1 : 0);
+        return result;
     }
 
     /**
@@ -356,13 +389,20 @@ public class WriteConcern {
     }
 
     /**
-     * Sets the "continue inserts on error" mode. This only applies to server side errors.
+     * Toggles the "continue inserts on error" mode. This only applies to server side errors.
      * If there is a document which does not validate in the client, an exception will still
      * be thrown in the client.
+     * This will return a *NEW INSTANCE* of WriteConcern with your preferred continueOnInsert value
+     *
      * @param continueOnErrorForInsert
      */
-    public void setContinueOnErrorForInsert(boolean continueOnErrorForInsert) {
-        this._continueOnErrorForInsert = continueOnErrorForInsert;
+    public WriteConcern continueOnErrorForInsert(boolean continueOnErrorForInsert) {
+        if ( _w instanceof Integer )
+            return new WriteConcern((Integer) _w, _wtimeout, _fsync, _j, continueOnErrorForInsert);
+        else if ( _w instanceof String )
+            return new WriteConcern((String) _w, _wtimeout, _fsync, _j, continueOnErrorForInsert);
+        else
+            throw new IllegalStateException("The w parameter must be an int or a String");
     }
 
     /**
@@ -393,6 +433,8 @@ public class WriteConcern {
     boolean _continueOnErrorForInsert = false;
 
     public static class Majority extends WriteConcern {
+
+        private static final long serialVersionUID = -4128295115883875212L;
 
         public Majority( ) {
             super( "majority", 0, false, false );

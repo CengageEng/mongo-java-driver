@@ -18,19 +18,38 @@
 
 package com.mongodb.util;
 
-import java.text.ParseException;
-import java.text.SimpleDateFormat;
-import java.util.*;
-import java.util.regex.Pattern;
-
+import com.mongodb.BasicDBObject;
+import com.mongodb.BasicDBObjectBuilder;
+import com.mongodb.DBObject;
+import com.mongodb.DBRef;
 import org.bson.BSON;
 import org.bson.BasicBSONObject;
-import org.bson.types.*;
+import org.bson.types.BSONTimestamp;
+import org.bson.types.Code;
+import org.bson.types.CodeWScope;
+import org.bson.types.ObjectId;
 
-import com.mongodb.*;
+import java.text.ParseException;
+import java.text.SimpleDateFormat;
+import java.util.Date;
+import java.util.GregorianCalendar;
+import java.util.SimpleTimeZone;
+import java.util.UUID;
+import java.util.regex.Pattern;
 
 public class JSONTest extends com.mongodb.util.TestCase {
 
+    @org.testng.annotations.Test(groups = {"basic"})
+    public void testSerializationMethods(){
+        
+        // basic test of each of JSON class' serialization methods
+        String json = "{ \"x\" : \"basic test\"}";
+        StringBuilder buf = new StringBuilder();
+        Object obj = JSON.parse(json);
+
+        assertEquals(JSON.serialize(obj), json);
+    }
+    
     @org.testng.annotations.Test(groups = {"basic"})
     public void testNumbers(){
         assertEquals(JSON.serialize(JSON.parse("{'x' : 5 }")), "{ \"x\" : 5}");
@@ -47,9 +66,20 @@ public class JSONTest extends com.mongodb.util.TestCase {
 
     @org.testng.annotations.Test(groups = {"basic"})
     public void testLongValues() {
-        Long val = Integer.MAX_VALUE + 1L; 
-        String test = String.format("{ \"x\" : %d}", val);
+        Long bigVal = Integer.MAX_VALUE + 1L;
+        String test = String.format("{ \"x\" : %d}", bigVal);
         assertEquals(JSON.serialize(JSON.parse(test)), test);
+
+        Long smallVal = Integer.MIN_VALUE - 1L;
+        String test2 = String.format("{ \"x\" : %d}", smallVal);
+        assertEquals(JSON.serialize(JSON.parse(test2)), test2);
+        
+        try{
+        	JSON.parse("{\"ReallyBigNumber\": 10000000000000000000 }");
+        	fail("JSONParseException should have been thrown");
+        }catch(JSONParseException e) {
+            // fall through
+        }
     }
 
     @org.testng.annotations.Test(groups = {"basic"})
@@ -264,6 +294,23 @@ public class JSONTest extends com.mongodb.util.TestCase {
 	   "{ \"$regex\" : \"" + x + "\" , \"$options\" : \"" + "i\"}";
        
        Pattern pattern = Pattern.compile( x , Pattern.CASE_INSENSITIVE);
+       assertEquals( serializedPattern, JSON.serialize(pattern));
+
+       BasicDBObject a = new BasicDBObject( "x" , pattern );
+       assertEquals( "{ \"x\" : " + serializedPattern + "}" , a.toString() );
+
+       DBObject b = (DBObject)JSON.parse( a.toString() );
+       assertEquals( b.get("x").getClass(), Pattern.class );
+       assertEquals( a.toString() , b.toString() );
+   }
+
+   @org.testng.annotations.Test
+   public void testRegexNoOptions() {
+       String x = "^Hello$";
+       String serializedPattern =
+       "{ \"$regex\" : \"" + x + "\"}";
+
+       Pattern pattern = Pattern.compile( x );
        assertEquals( serializedPattern, JSON.serialize(pattern));
 
        BasicDBObject a = new BasicDBObject( "x" , pattern );

@@ -96,12 +96,21 @@ public class MongoException extends RuntimeException {
 
         private static final long serialVersionUID = -4415279469780082174L;
 
-        Network( String msg , java.io.IOException ioe ){
+        /**
+         * 
+         * @param msg the message
+         * @param ioe the cause
+         */
+        public Network( String msg , java.io.IOException ioe ){
             super( -2 , msg , ioe );
             _ioe = ioe;
         }
 
-        Network( java.io.IOException ioe ){
+        /**
+         * 
+         * @param ioe the cause
+         */
+        public Network( java.io.IOException ioe ){
             super( ioe.toString() , ioe );
             _ioe = ioe;
         }
@@ -116,7 +125,12 @@ public class MongoException extends RuntimeException {
 
         private static final long serialVersionUID = -4415279469780082174L;
 
-        DuplicateKey( int code , String msg ){
+        /**
+         * 
+         * @param code the error code
+         * @param msg the message
+         */
+        public DuplicateKey( int code , String msg ){
             super( code , msg );
         }
     }
@@ -128,8 +142,34 @@ public class MongoException extends RuntimeException {
         
         private static final long serialVersionUID = -4415279469780082174L;
 
-        CursorNotFound(){
-            super( -5 , "cursor not found on server" );
+        private final long cursorId;
+        private final ServerAddress serverAddress;
+
+        /**
+         *
+         * @param cursorId cursor
+         * @param serverAddress server address
+         */
+        public CursorNotFound(long cursorId, ServerAddress serverAddress){
+            super( -5 , "cursor " + cursorId + " not found on server " + serverAddress );
+            this.cursorId = cursorId;
+            this.serverAddress = serverAddress;
+        }
+
+        /**
+         * Get the cursor id that wasn't found.
+         * @return
+         */
+        public long getCursorId() {
+            return cursorId;
+        }
+
+        /**
+         * The server address where the cursor is.
+         * @return
+         */
+        public ServerAddress getServerAddress() {
+            return serverAddress;
         }
     }
 

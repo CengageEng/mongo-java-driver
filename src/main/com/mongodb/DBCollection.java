@@ -19,7 +19,11 @@
 package com.mongodb;
 
 // Mongo
+
+import org.bson.types.ObjectId;
+
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -27,8 +31,6 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-
-import org.bson.types.ObjectId;
 
 /** This class provides a skeleton implementation of a database collection.
  * <p>A typical invocation sequence is thus
@@ -53,8 +55,8 @@ public abstract class DBCollection {
      * @throws MongoException
      * @dochub insert
      */
-    public WriteResult insert(DBObject[] arr , WriteConcern concern ) throws MongoException {
-        return insert( arr, concern, getDBEncoderFactory().create() );
+    public WriteResult insert(DBObject[] arr , WriteConcern concern ){
+        return insert( arr, concern, getDBEncoder());
     }
 
     /**
@@ -69,7 +71,9 @@ public abstract class DBCollection {
      * @throws MongoException
      * @dochub insert
      */
-    public abstract WriteResult insert(DBObject[] arr , WriteConcern concern, DBEncoder encoder) throws MongoException;
+    public WriteResult insert(DBObject[] arr , WriteConcern concern, DBEncoder encoder) {
+        return insert(Arrays.asList(arr), concern, encoder);
+    }
 
     /**
      * Inserts a document into the database.
@@ -82,9 +86,8 @@ public abstract class DBCollection {
      * @throws MongoException
      * @dochub insert
      */
-    public WriteResult insert(DBObject o , WriteConcern concern )
-        throws MongoException {
-        return insert( new DBObject[]{ o } , concern );
+    public WriteResult insert(DBObject o , WriteConcern concern ){
+        return insert( Arrays.asList(o) , concern );
     }
 
     /**
@@ -97,8 +100,7 @@ public abstract class DBCollection {
      * @throws MongoException
      * @dochub insert
      */
-    public WriteResult insert(DBObject ... arr)
-        throws MongoException {
+    public WriteResult insert(DBObject ... arr){
         return insert( arr , getWriteConcern() );
     }
 
@@ -112,8 +114,7 @@ public abstract class DBCollection {
      * @throws MongoException
      * @dochub insert
      */
-    public WriteResult insert(WriteConcern concern, DBObject ... arr)
-        throws MongoException {
+    public WriteResult insert(WriteConcern concern, DBObject ... arr){
         return insert( arr, concern );
     }
 
@@ -127,8 +128,7 @@ public abstract class DBCollection {
      * @throws MongoException
      * @dochub insert
      */
-    public WriteResult insert(List<DBObject> list )
-        throws MongoException {
+    public WriteResult insert(List<DBObject> list ){
         return insert( list, getWriteConcern() );
     }
 
@@ -143,10 +143,22 @@ public abstract class DBCollection {
      * @throws MongoException
      * @dochub insert
      */
-    public WriteResult insert(List<DBObject> list, WriteConcern concern )
-            throws MongoException {
-        return insert( list.toArray( new DBObject[list.size()] ) , concern );
+    public WriteResult insert(List<DBObject> list, WriteConcern concern ){
+        return insert(list, concern, getDBEncoder() );
     }
+
+    /**
+     * Saves document(s) to the database.
+     * if doc doesn't have an _id, one will be added
+     * you can get the _id that was added from doc after the insert
+     *
+     * @param list list of documents to save
+     * @param concern the write concern
+     * @return
+     * @throws MongoException
+     * @dochub insert
+     */
+    public abstract WriteResult insert(List<DBObject> list, WriteConcern concern, DBEncoder encoder);
 
     /**
      * Performs an update operation.
@@ -161,8 +173,8 @@ public abstract class DBCollection {
      * @throws MongoException
      * @dochub update
      */
-    public WriteResult update( DBObject q , DBObject o , boolean upsert , boolean multi , WriteConcern concern ) throws MongoException {
-        return update( q, o, upsert, multi, concern, getDBEncoderFactory().create() );
+    public WriteResult update( DBObject q , DBObject o , boolean upsert , boolean multi , WriteConcern concern ){
+        return update( q, o, upsert, multi, concern, getDBEncoder());
     }
 
     /**
@@ -179,7 +191,7 @@ public abstract class DBCollection {
      * @throws MongoException
      * @dochub update
      */
-    public abstract WriteResult update( DBObject q , DBObject o , boolean upsert , boolean multi , WriteConcern concern, DBEncoder encoder ) throws MongoException ;
+    public abstract WriteResult update( DBObject q , DBObject o , boolean upsert , boolean multi , WriteConcern concern, DBEncoder encoder );
 
     /**
      * calls {@link DBCollection#update(com.mongodb.DBObject, com.mongodb.DBObject, boolean, boolean, com.mongodb.WriteConcern)} with default WriteConcern.
@@ -192,8 +204,7 @@ public abstract class DBCollection {
      * @throws MongoException
      * @dochub update
      */
-    public WriteResult update( DBObject q , DBObject o , boolean upsert , boolean multi )
-        throws MongoException {
+    public WriteResult update( DBObject q , DBObject o , boolean upsert , boolean multi ){
         return update( q , o , upsert , multi , getWriteConcern() );
     }
 
@@ -205,7 +216,7 @@ public abstract class DBCollection {
      * @throws MongoException
      * @dochub update
      */
-    public WriteResult update( DBObject q , DBObject o ) throws MongoException {
+    public WriteResult update( DBObject q , DBObject o ){
         return update( q , o , false , false );
     }
 
@@ -217,7 +228,7 @@ public abstract class DBCollection {
      * @throws MongoException
      * @dochub update
      */
-    public WriteResult updateMulti( DBObject q , DBObject o ) throws MongoException {
+    public WriteResult updateMulti( DBObject q , DBObject o ){
         return update( q , o , false , true );
     }
 
@@ -235,8 +246,8 @@ public abstract class DBCollection {
      * @throws MongoException
      * @dochub remove
      */
-    public WriteResult remove( DBObject o , WriteConcern concern ) throws MongoException {
-        return remove(  o, concern, getDBEncoderFactory().create() );
+    public WriteResult remove( DBObject o , WriteConcern concern ){
+        return remove(  o, concern, getDBEncoder());
     }
 
     /**
@@ -248,7 +259,7 @@ public abstract class DBCollection {
      * @throws MongoException
      * @dochub remove
      */
-    public abstract WriteResult remove( DBObject o , WriteConcern concern, DBEncoder encoder ) throws MongoException ;
+    public abstract WriteResult remove( DBObject o , WriteConcern concern, DBEncoder encoder );
 
     /**
      * calls {@link DBCollection#remove(com.mongodb.DBObject, com.mongodb.WriteConcern)} with the default WriteConcern
@@ -257,8 +268,7 @@ public abstract class DBCollection {
      * @throws MongoException
      * @dochub remove
      */
-    public WriteResult remove( DBObject o )
-        throws MongoException {
+    public WriteResult remove( DBObject o ){
         return remove( o , getWriteConcern() );
     }
 
@@ -266,7 +276,11 @@ public abstract class DBCollection {
     /**
      * Finds objects
      */
-    abstract Iterator<DBObject> __find( DBObject ref , DBObject fields , int numToSkip , int batchSize , int limit, int options, ReadPreference readPref, DBDecoder decoder ) throws MongoException ;
+    abstract Iterator<DBObject> __find( DBObject ref , DBObject fields , int numToSkip , int batchSize , int limit, int options, ReadPreference readPref, DBDecoder decoder );
+
+    abstract Iterator<DBObject> __find( DBObject ref , DBObject fields , int numToSkip , int batchSize , int limit, int options,
+                                        ReadPreference readPref, DBDecoder decoder, DBEncoder encoder );
+
 
     /**
      * Calls {@link DBCollection#find(com.mongodb.DBObject, com.mongodb.DBObject, int, int)} and applies the query options
@@ -280,7 +294,7 @@ public abstract class DBCollection {
      * @dochub find
      */
     @Deprecated
-    public final DBCursor find( DBObject query , DBObject fields , int numToSkip , int batchSize , int options ) throws MongoException{
+    public DBCursor find( DBObject query , DBObject fields , int numToSkip , int batchSize , int options ){
     	return find(query, fields, numToSkip, batchSize).addOption(options);
     }
 
@@ -298,7 +312,7 @@ public abstract class DBCollection {
      * @dochub find
      */
     @Deprecated
-    public final DBCursor find( DBObject query , DBObject fields , int numToSkip , int batchSize ) {
+    public DBCursor find( DBObject query , DBObject fields , int numToSkip , int batchSize ) {
     	DBCursor cursor = find(query, fields).skip(numToSkip).batchSize(batchSize);
     	return cursor;
     }
@@ -313,8 +327,7 @@ public abstract class DBCollection {
      * @return the object, if found, otherwise <code>null</code>
      * @throws MongoException
      */
-    public final DBObject findOne( Object obj )
-        throws MongoException {
+    public DBObject findOne( Object obj ){
         return findOne(obj, null);
     }
 
@@ -326,11 +339,12 @@ public abstract class DBCollection {
      * @param obj any valid object
      * @param fields fields to return
      * @return the object, if found, otherwise <code>null</code>
+     * @throws MongoException
      * @dochub find
      */
-    public final DBObject findOne( Object obj, DBObject fields ) {
-        Iterator<DBObject> iterator = __find(new BasicDBObject("_id", obj), fields, 0, -1, 0, getOptions(), _readPref, _decoderFactory.create() );
-        return (iterator != null ? iterator.next() : null);
+    public DBObject findOne( Object obj, DBObject fields ){
+        Iterator<DBObject> iterator = __find( new BasicDBObject("_id", obj), fields, 0, -1, 0, getOptions(), getReadPreference(), getDecoder() );
+        return (iterator.hasNext() ? iterator.next() : null);
     }
 
     /**
@@ -343,8 +357,9 @@ public abstract class DBCollection {
      * @param returnNew if true, the updated document is returned, otherwise the old document is returned (or it would be lost forever)
      * @param upsert do upsert (insert if document not present)
      * @return the document
+     * @throws MongoException
      */
-    public DBObject findAndModify(DBObject query, DBObject fields, DBObject sort, boolean remove, DBObject update, boolean returnNew, boolean upsert) {
+    public DBObject findAndModify(DBObject query, DBObject fields, DBObject sort, boolean remove, DBObject update, boolean returnNew, boolean upsert){
 
         BasicDBObject cmd = new BasicDBObject( "findandmodify", _name);
         if (query != null && !query.keySet().isEmpty())
@@ -358,7 +373,7 @@ public abstract class DBCollection {
             cmd.append( "remove", remove );
         else {
             if (update != null && !update.keySet().isEmpty()) {
-                // if 1st key doesnt start with $, then object will be inserted as is, need to check it
+                // if 1st key doesn't start with $, then object will be inserted as is, need to check it
                 String key = update.keySet().iterator().next();
                 if (key.charAt(0) != '$')
                     _checkObject(update, false, false);
@@ -374,10 +389,41 @@ public abstract class DBCollection {
             throw new MongoException("FindAndModify: Remove cannot be mixed with the Update, or returnNew params!");
 
         CommandResult res = this._db.command( cmd );
-        if (res.ok() || res.getErrorMessage().equals( "No matching object found" ))
-            return (DBObject) res.get( "value" );
+        if (res.ok() || res.getErrorMessage().equals( "No matching object found" )) {
+            return replaceWithObjectClass((DBObject) res.get( "value" ));
+        }
         res.throwOnError();
         return null;
+    }
+
+    /**
+     * Doesn't yet handle internal classes properly, so this method only does something if object class is set but
+     * no internal classes are set.
+     *
+     * @param oldObj  the original value from the command result
+     * @return replaced object if necessary, or oldObj
+     */
+    private DBObject replaceWithObjectClass(DBObject oldObj) {
+        if (oldObj == null || getObjectClass() == null &  _internalClass.isEmpty()) {
+            return oldObj;
+        }
+
+        DBObject newObj = instantiateObjectClassInstance();
+
+        for (String key : oldObj.keySet()) {
+            newObj.put(key, oldObj.get(key));
+        }
+        return newObj;
+    }
+
+    private DBObject instantiateObjectClassInstance() {
+        try {
+            return (DBObject) getObjectClass().newInstance();
+        } catch (InstantiationException e) {
+            throw new MongoInternalException("can't create instance of type " + getObjectClass(), e);
+        } catch (IllegalAccessException e) {
+            throw new MongoInternalException("can't create instance of type " + getObjectClass(), e);
+        }
     }
 
 
@@ -388,8 +434,9 @@ public abstract class DBCollection {
      * @param sort
      * @param update
      * @return the old document
+     * @throws MongoException
      */
-    public DBObject findAndModify( DBObject query , DBObject sort , DBObject update){
+    public DBObject findAndModify( DBObject query , DBObject sort , DBObject update) {
     	return findAndModify( query, null, sort, false, update, false, false);
     }
 
@@ -399,8 +446,9 @@ public abstract class DBCollection {
      * @param query
      * @param update
      * @return the old document
+     * @throws MongoException
      */
-    public DBObject findAndModify( DBObject query , DBObject update ) {
+    public DBObject findAndModify( DBObject query , DBObject update ){
     	return findAndModify( query, null, null, false, update, false, false );
     }
 
@@ -409,6 +457,7 @@ public abstract class DBCollection {
      * with fields=null, sort=null, remove=true, returnNew=false, upsert=false
      * @param query
      * @return the removed document
+     * @throws MongoException
      */
     public DBObject findAndRemove( DBObject query ) {
     	return findAndModify( query, null, null, true, null, false, false );
@@ -421,8 +470,7 @@ public abstract class DBCollection {
      * @param keys an object with a key set of the fields desired for the index
      * @throws MongoException
      */
-    public final void createIndex( final DBObject keys )
-        throws MongoException {
+    public void createIndex( final DBObject keys ){
         createIndex( keys , defaultOptions( keys ) );
     }
 
@@ -432,8 +480,8 @@ public abstract class DBCollection {
      * @param options
      * @throws MongoException
      */
-    public void createIndex( DBObject keys , DBObject options ) throws MongoException {
-        createIndex( keys, options, getDBEncoderFactory().create() );
+    public void createIndex( DBObject keys , DBObject options ){
+        createIndex( keys, options, getDBEncoder());
     }
 
     /**
@@ -443,13 +491,14 @@ public abstract class DBCollection {
      * @param encoder the DBEncoder to use
      * @throws MongoException
      */
-    public abstract void createIndex( DBObject keys , DBObject options, DBEncoder encoder ) throws MongoException;
+    public abstract void createIndex( DBObject keys , DBObject options, DBEncoder encoder );
 
     /**
      * Creates an ascending index on a field with default options, if one does not already exist.
      * @param name name of field to index on
+     * @throws MongoException
      */
-    public final void ensureIndex( final String name ){
+    public void ensureIndex( final String name ){
         ensureIndex( new BasicDBObject( name , 1 ) );
     }
 
@@ -458,8 +507,7 @@ public abstract class DBCollection {
      * @param keys an object with a key set of the fields desired for the index
      * @throws MongoException
      */
-    public final void ensureIndex( final DBObject keys )
-        throws MongoException {
+    public void ensureIndex( final DBObject keys ){
         ensureIndex( keys , defaultOptions( keys ) );
     }
 
@@ -470,8 +518,7 @@ public abstract class DBCollection {
      * @throws MongoException
      * @dochub indexes
      */
-    public void ensureIndex( DBObject keys , String name )
-        throws MongoException {
+    public void ensureIndex( DBObject keys , String name ){
         ensureIndex( keys , name , false );
     }
 
@@ -482,8 +529,7 @@ public abstract class DBCollection {
      * @param unique if the index should be unique
      * @throws MongoException
      */
-    public void ensureIndex( DBObject keys , String name , boolean unique )
-        throws MongoException {
+    public void ensureIndex( DBObject keys , String name , boolean unique ){
         DBObject options = defaultOptions( keys );
         if (name != null && name.length()>0)
             options.put( "name" , name );
@@ -498,8 +544,7 @@ public abstract class DBCollection {
      * @param optionsIN options for the index (name, unique, etc)
      * @throws MongoException
      */
-    public final void ensureIndex( final DBObject keys , final DBObject optionsIN )
-        throws MongoException {
+    public void ensureIndex( final DBObject keys , final DBObject optionsIN ){
 
         if ( checkReadOnly( false ) ) return;
 
@@ -564,8 +609,8 @@ public abstract class DBCollection {
      * @return an iterator over the results
      * @dochub find
      */
-    public final DBCursor find( DBObject ref ){
-        return new DBCursor( this, ref, null, _readPref );
+    public DBCursor find( DBObject ref ){
+        return new DBCursor( this, ref, null, getReadPreference());
     }
 
     /**
@@ -591,8 +636,8 @@ public abstract class DBCollection {
      * @return a cursor to iterate over results
      * @dochub find
      */
-    public final DBCursor find( DBObject ref , DBObject keys ){
-        return new DBCursor( this, ref, keys, _readPref );
+    public DBCursor find( DBObject ref , DBObject keys ){
+        return new DBCursor( this, ref, keys, getReadPreference());
     }
 
 
@@ -601,8 +646,8 @@ public abstract class DBCollection {
      * @return a cursor which will iterate over every object
      * @dochub find
      */
-    public final DBCursor find(){
-        return new DBCursor( this, null, null, _readPref );
+    public DBCursor find(){
+        return new DBCursor( this, null, null, getReadPreference());
     }
 
     /**
@@ -610,8 +655,7 @@ public abstract class DBCollection {
      * @return the object found, or <code>null</code> if the collection is empty
      * @throws MongoException
      */
-    public final DBObject findOne()
-        throws MongoException {
+    public DBObject findOne(){
         return findOne( new BasicDBObject() );
     }
 
@@ -621,9 +665,8 @@ public abstract class DBCollection {
      * @return the object found, or <code>null</code> if no such object exists
      * @throws MongoException
      */
-    public final DBObject findOne( DBObject o )
-        throws MongoException {
-        return findOne( o, null, _readPref );
+    public DBObject findOne( DBObject o ){
+        return findOne( o, null, null, getReadPreference());
     }
 
     /**
@@ -631,25 +674,75 @@ public abstract class DBCollection {
      * @param o the query object
      * @param fields fields to return
      * @return the object found, or <code>null</code> if no such object exists
+     * @throws MongoException
      * @dochub find
      */
-    public final DBObject findOne( DBObject o, DBObject fields ) {
-        return findOne( o, fields, _readPref );
+    public DBObject findOne( DBObject o, DBObject fields ) {
+        return findOne( o, fields, null, getReadPreference());
     }
+    
+    /**
+     * Returns a single obejct from this collection matching the query.
+     * @param o the query object
+     * @param fields fields to return
+     * @param orderBy fields to order by
+     * @return the object found, or <code>null</code> if no such object exists
+     * @throws MongoException
+     * @dochub find
+     */
+    public DBObject findOne( DBObject o, DBObject fields, DBObject orderBy){
+    	return findOne(o, fields, orderBy, getReadPreference());
+    }
+    
     /**
      * Returns a single object from this collection matching the query.
      * @param o the query object
      * @param fields fields to return
+     * @param readPref
      * @return the object found, or <code>null</code> if no such object exists
+     * @throws MongoException
      * @dochub find
      */
-    public final DBObject findOne( DBObject o, DBObject fields, ReadPreference readPref ) {
-        Iterator<DBObject> i = __find( o , fields , 0 , -1 , 0, getOptions(), readPref, _decoderFactory.create() );
-        DBObject obj = (i == null ? null : i.next());
+    public DBObject findOne( DBObject o, DBObject fields, ReadPreference readPref ){
+       return findOne(o, fields, null, readPref);
+    }
+    
+    /**
+     * Returns a single object from this collection matching the query.
+     * @param o the query object
+     * @param fields fields to return
+     * @param orderBy fields to order by
+     * @return the object found, or <code>null</code> if no such object exists
+     * @throws MongoException
+     * @dochub find
+     */
+    public DBObject findOne( DBObject o, DBObject fields, DBObject orderBy, ReadPreference readPref ){
+
+        QueryOpBuilder queryOpBuilder = new QueryOpBuilder().addQuery(o).addOrderBy(orderBy);
+
+        if (getDB().getMongo().isMongosConnection()) {
+            queryOpBuilder.addReadPreference(readPref.toDBObject());
+        }
+
+        Iterator<DBObject> i = __find(queryOpBuilder.get(), fields , 0 , -1 , 0, getOptions(), readPref, getDecoder() );
+        
+        DBObject obj = (i.hasNext() ? i.next() : null);
         if ( obj != null && ( fields != null && fields.keySet().size() > 0 ) ){
             obj.markAsPartialObject();
         }
         return obj;
+    }
+
+    // Only create a new decoder if there is a decoder factory explicitly set on the collection.  Otherwise return null
+    // so that DBPort will use a cached decoder from the default factory.
+    private DBDecoder getDecoder() {
+        return getDBDecoderFactory() != null ? getDBDecoderFactory().create() : null;
+    }
+
+    // Only create a new encoder if there is an encoder factory explicitly set on the collection.  Otherwise return null
+    // to allow DB to create its own or use a cached one.
+    private DBEncoder getDBEncoder() {
+        return getDBEncoderFactory() != null ? getDBEncoderFactory().create() : null;
     }
 
 
@@ -658,7 +751,7 @@ public abstract class DBCollection {
      * @param o <code>DBObject</code> to which to add fields
      * @return the modified parameter object
      */
-    public final Object apply( DBObject o ){
+    public Object apply( DBObject o ){
         return apply( o , true );
     }
 
@@ -668,7 +761,7 @@ public abstract class DBCollection {
      * @param ensureID whether to add an <code>_id</code> field
      * @return the modified object <code>o</code>
      */
-    public final Object apply( DBObject jo , boolean ensureID ){
+    public Object apply( DBObject jo , boolean ensureID ){
 
         Object id = jo.get( "_id" );
         if ( ensureID && id == null ){
@@ -686,8 +779,9 @@ public abstract class DBCollection {
      * @param jo the <code>DBObject</code> to save
      *        will add <code>_id</code> field to jo if needed
      * @return
+     * @throws MongoException
      */
-    public final WriteResult save( DBObject jo ) {
+    public WriteResult save( DBObject jo ){
     	return save(jo, getWriteConcern());
     }
 
@@ -698,8 +792,7 @@ public abstract class DBCollection {
      * @return
      * @throws MongoException
      */
-    public final WriteResult save( DBObject jo, WriteConcern concern )
-        throws MongoException {
+    public WriteResult save( DBObject jo, WriteConcern concern ){
         if ( checkReadOnly( true ) )
             return null;
 
@@ -730,8 +823,7 @@ public abstract class DBCollection {
      * Drops all indices from this collection
      * @throws MongoException
      */
-    public void dropIndexes()
-        throws MongoException {
+    public void dropIndexes(){
         dropIndexes( "*" );
     }
 
@@ -741,8 +833,7 @@ public abstract class DBCollection {
      * @param name the index name
      * @throws MongoException
      */
-    public void dropIndexes( String name )
-        throws MongoException {
+    public void dropIndexes( String name ){
         DBObject cmd = BasicDBObjectBuilder.start()
             .add( "deleteIndexes" , getName() )
             .add( "index" , name )
@@ -759,8 +850,7 @@ public abstract class DBCollection {
      * Drops (deletes) this collection. Use with care.
      * @throws MongoException
      */
-    public void drop()
-        throws MongoException {
+    public void drop(){
         resetIndexCache();
         CommandResult res =_db.command( BasicDBObjectBuilder.start().add( "drop" , getName() ).get() );
         if (res.ok() || res.getErrorMessage().equals( "ns not found" ))
@@ -773,8 +863,7 @@ public abstract class DBCollection {
      * @return
      * @throws MongoException
      */
-    public long count()
-        throws MongoException {
+    public long count(){
         return getCount(new BasicDBObject(), null);
     }
 
@@ -784,45 +873,88 @@ public abstract class DBCollection {
      * @return
      * @throws MongoException
      */
-    public long count(DBObject query)
-        throws MongoException {
+    public long count(DBObject query){
         return getCount(query, null);
+    }
+    
+    /**
+     * returns the number of documents that match a query.
+     * @param query query to match
+     * @param readPrefs ReadPreferences for this query
+     * @return
+     * @throws MongoException
+     */
+    public long count(DBObject query, ReadPreference readPrefs ){
+        return getCount(query, null, readPrefs);
     }
 
 
     /**
      *  calls {@link DBCollection#getCount(com.mongodb.DBObject, com.mongodb.DBObject)} with an empty query and null fields.
      *  @return number of documents that match query
-     * @throws MongoException
+     *  @throws MongoException
      */
-    public long getCount()
-        throws MongoException {
+    public long getCount(){
         return getCount(new BasicDBObject(), null);
+    }
+    
+    /**
+     *  calls {@link DBCollection#getCount(com.mongodb.DBObject, com.mongodb.DBObject, com.mongodb.ReadPreference)} with empty query and null fields.
+     *  @param readPrefs ReadPreferences for this command
+     *  @return number of documents that match query
+     *  @throws MongoException
+     */
+    public long getCount(ReadPreference readPrefs){
+        return getCount(new BasicDBObject(), null, readPrefs);
     }
 
     /**
      *  calls {@link DBCollection#getCount(com.mongodb.DBObject, com.mongodb.DBObject)} with null fields.
      *  @param query query to match
      *  @return
-     * @throws MongoException
-     */
-    public long getCount(DBObject query)
-        throws MongoException {
+     *  @throws MongoException
+     */ 
+    public long getCount(DBObject query){
         return getCount(query, null);
     }
 
+    
     /**
      *  calls {@link DBCollection#getCount(com.mongodb.DBObject, com.mongodb.DBObject, long, long)} with limit=0 and skip=0
      *  @param query query to match
      *  @param fields fields to return
      *  @return
-     * @throws MongoException
+     *  @throws MongoException
      */
-    public long getCount(DBObject query, DBObject fields)
-        throws MongoException {
+    public long getCount(DBObject query, DBObject fields){
         return getCount( query , fields , 0 , 0 );
     }
+    
+    /**
+     *  calls {@link DBCollection#getCount(com.mongodb.DBObject, com.mongodb.DBObject, long, long, com.mongodb.ReadPreference)} with limit=0 and skip=0
+     *  @param query query to match
+     *  @param fields fields to return
+     *  @param readPrefs ReadPreferences for this command
+     *  @return
+     *  @throws MongoException
+     */
+    public long getCount(DBObject query, DBObject fields, ReadPreference readPrefs){
+        return getCount( query , fields , 0 , 0, readPrefs );
+    }
 
+    /**
+     *  calls {@link DBCollection#getCount(com.mongodb.DBObject, com.mongodb.DBObject, long, long, com.mongodb.ReadPreference)} with the DBCollection's ReadPreference
+     *  @param query query to match
+     *  @param fields fields to return
+     *  @param limit limit the count to this value
+     *  @param skip skip number of entries to skip
+     *  @return
+     *  @throws MongoException
+     */
+    public long getCount(DBObject query, DBObject fields, long limit, long skip){
+    	return getCount(query, fields, limit, skip, getReadPreference());
+    }
+    
     /**
      *  Returns the number of documents in the collection
      *  that match the specified query
@@ -830,13 +962,13 @@ public abstract class DBCollection {
      *  @param query query to select documents to count
      *  @param fields fields to return
      *  @param limit limit the count to this value
-     * @param skip number of entries to skip
-     * @return number of documents that match query and fields
-     * @throws MongoException
+     *  @param skip number of entries to skip
+     *  @param readPrefs ReadPreferences for this command
+     *  @return number of documents that match query and fields
+     *  @throws MongoException
      */
-    public long getCount(DBObject query, DBObject fields, long limit, long skip )
-        throws MongoException {
 
+    public long getCount(DBObject query, DBObject fields, long limit, long skip, ReadPreference readPrefs ){
         BasicDBObject cmd = new BasicDBObject();
         cmd.put("count", getName());
         cmd.put("query", query);
@@ -849,8 +981,7 @@ public abstract class DBCollection {
         if ( skip > 0 )
             cmd.put( "skip" , skip );
 
-        CommandResult res = _db.command(cmd,getOptions());
-
+        CommandResult res = _db.command(cmd,getOptions(),readPrefs);
         if ( ! res.ok() ){
             String errmsg = res.getErrorMessage();
 
@@ -865,6 +996,10 @@ public abstract class DBCollection {
 
         return res.getLong("n");
     }
+    
+    CommandResult command(DBObject cmd, int options, ReadPreference readPrefs){
+    	return _db.command(cmd,getOptions(),readPrefs);
+    }
 
     /**
      * Calls {@link DBCollection#rename(java.lang.String, boolean)} with dropTarget=false
@@ -872,8 +1007,7 @@ public abstract class DBCollection {
      * @return the new collection
      * @throws MongoException
      */
-    public DBCollection rename( String newName )
-        throws MongoException {
+    public DBCollection rename( String newName ){
         return rename(newName, false);
     }
 
@@ -884,8 +1018,7 @@ public abstract class DBCollection {
      * @return the new collection
      * @throws MongoException
      */
-    public DBCollection rename( String newName, boolean dropTarget )
-        throws MongoException {
+    public DBCollection rename( String newName, boolean dropTarget ){
         CommandResult ret =
             _db.getSisterDB( "admin" )
             .command( BasicDBObjectBuilder.start()
@@ -908,11 +1041,10 @@ public abstract class DBCollection {
      * @throws MongoException
      * @see <a href="http://www.mongodb.org/display/DOCS/Aggregation">http://www.mongodb.org/display/DOCS/Aggregation</a>
      */
-    public DBObject group( DBObject key , DBObject cond , DBObject initial , String reduce )
-        throws MongoException {
+    public DBObject group( DBObject key , DBObject cond , DBObject initial , String reduce ){
         return group( key , cond , initial , reduce , null );
-    }
-
+    }    
+    
     /**
      * Applies a group operation
      * @param key - { a : true }
@@ -924,10 +1056,26 @@ public abstract class DBCollection {
      * @throws MongoException
      * @see <a href="http://www.mongodb.org/display/DOCS/Aggregation">http://www.mongodb.org/display/DOCS/Aggregation</a>
      */
-    public DBObject group( DBObject key , DBObject cond , DBObject initial , String reduce , String finalize )
-        throws MongoException {
+    public DBObject group( DBObject key , DBObject cond , DBObject initial , String reduce , String finalize ){
         GroupCommand cmd = new GroupCommand(this, key, cond, initial, reduce, finalize);
         return group( cmd );
+    }
+    
+    /**
+     * Applies a group operation
+     * @param key - { a : true }
+     * @param cond - optional condition on query
+     * @param reduce javascript reduce function
+     * @param initial initial value for first match on a key
+     * @param finalize An optional function that can operate on the result(s) of the reduce function.
+     * @param readPrefs ReadPreferences for this command
+     * @return
+     * @throws MongoException
+     * @see <a href="http://www.mongodb.org/display/DOCS/Aggregation">http://www.mongodb.org/display/DOCS/Aggregation</a>
+     */
+    public DBObject group( DBObject key , DBObject cond , DBObject initial , String reduce , String finalize, ReadPreference readPrefs ){
+        GroupCommand cmd = new GroupCommand(this, key, cond, initial, reduce, finalize);
+        return group( cmd, readPrefs );
     }
 
     /**
@@ -938,11 +1086,22 @@ public abstract class DBCollection {
      * @see <a href="http://www.mongodb.org/display/DOCS/Aggregation">http://www.mongodb.org/display/DOCS/Aggregation</a>
      */
     public DBObject group( GroupCommand cmd ) {
-        CommandResult res =  _db.command( cmd.toDBObject(), getOptions() );
+        return group(cmd, getReadPreference());
+    }
+
+    /**
+     * Applies a group operation
+     * @param cmd the group command
+     * @param readPrefs ReadPreferences for this command
+     * @return
+     * @throws MongoException
+     * @see <a href="http://www.mongodb.org/display/DOCS/Aggregation">http://www.mongodb.org/display/DOCS/Aggregation</a>
+     */
+    public DBObject group( GroupCommand cmd, ReadPreference readPrefs ) {
+        CommandResult res =  _db.command( cmd.toDBObject(), getOptions(), readPrefs );
         res.throwOnError();
         return (DBObject)res.get( "retval" );
     }
-
 
     /**
      * @deprecated prefer the {@link DBCollection#group(com.mongodb.GroupCommand)} which is more standard
@@ -953,10 +1112,9 @@ public abstract class DBCollection {
      * @see <a href="http://www.mongodb.org/display/DOCS/Aggregation">http://www.mongodb.org/display/DOCS/Aggregation</a>
      */
     @Deprecated
-    public DBObject group( DBObject args )
-        throws MongoException {
+    public DBObject group( DBObject args ){
         args.put( "ns" , getName() );
-        CommandResult res =  _db.command( new BasicDBObject( "group" , args ), getOptions() );
+        CommandResult res =  _db.command( new BasicDBObject( "group" , args ), getOptions(), getReadPreference() );
         res.throwOnError();
         return (DBObject)res.get( "retval" );
     }
@@ -965,9 +1123,21 @@ public abstract class DBCollection {
      * find distinct values for a key
      * @param key
      * @return
+     * @throws MongoException
      */
     public List distinct( String key ){
         return distinct( key , new BasicDBObject() );
+    }
+    
+    /**
+     * find distinct values for a key
+     * @param key
+     * @param readPrefs
+     * @return
+     * @throws MongoException
+     */
+    public List distinct( String key, ReadPreference readPrefs ){
+        return distinct( key , new BasicDBObject(), readPrefs );
     }
 
     /**
@@ -975,19 +1145,32 @@ public abstract class DBCollection {
      * @param key
      * @param query query to match
      * @return
+     * @throws MongoException
      */
 	public List distinct( String key , DBObject query ){
+        return distinct(key, query, getReadPreference());
+    }
+
+    /**
+     * find distinct values for a key
+     * @param key
+     * @param query query to match
+     * @param readPrefs
+     * @return
+     * @throws MongoException
+     */
+	public List distinct( String key , DBObject query, ReadPreference readPrefs ){
         DBObject c = BasicDBObjectBuilder.start()
             .add( "distinct" , getName() )
             .add( "key" , key )
             .add( "query" , query )
             .get();
 
-        CommandResult res = _db.command( c, getOptions() );
+        CommandResult res = _db.command( c, getOptions(), readPrefs );
         res.throwOnError();
         return (List)(res.get( "values" ));
     }
-
+	
     /**
      * performs a map reduce operation
      * Runs the command in REPLACE output mode (saves to named collection)
@@ -1004,7 +1187,7 @@ public abstract class DBCollection {
      * @throws MongoException
      * @dochub mapreduce
      */
-    public MapReduceOutput mapReduce( String map , String reduce , String outputTarget , DBObject query ) throws MongoException{
+    public MapReduceOutput mapReduce( String map , String reduce , String outputTarget , DBObject query ){
         return mapReduce( new MapReduceCommand( this , map , reduce , outputTarget , MapReduceCommand.OutputType.REPLACE, query ) );
     }
 
@@ -1031,9 +1214,39 @@ public abstract class DBCollection {
      * @throws MongoException
      * @dochub mapreduce
      */
-    public MapReduceOutput mapReduce( String map , String reduce , String outputTarget , MapReduceCommand.OutputType outputType , DBObject query )
-            throws MongoException{
+    public MapReduceOutput mapReduce( String map , String reduce , String outputTarget , MapReduceCommand.OutputType outputType , DBObject query ){
         return mapReduce( new MapReduceCommand( this , map , reduce , outputTarget , outputType , query ) );
+    }
+
+    /**
+     * performs a map reduce operation
+     * Specify an outputType to control job execution
+     * * INLINE - Return results inline
+     * * REPLACE - Replace the output collection with the job output
+     * * MERGE - Merge the job output with the existing contents of outputTarget
+     * * REDUCE - Reduce the job output with the existing contents of
+     * outputTarget
+     *
+     * @param map
+     *            map function in javascript code
+     * @param outputTarget
+     *            optional - leave null if want to use temp collection
+     * @param outputType
+     *            set the type of job output
+     * @param reduce
+     *            reduce function in javascript code
+     * @param query
+     *            to match
+     * @param readPrefs
+     *            ReadPreferences for this operation
+     * @return
+     * @throws MongoException
+     * @dochub mapreduce
+     */
+    public MapReduceOutput mapReduce( String map , String reduce , String outputTarget , MapReduceCommand.OutputType outputType , DBObject query, ReadPreference readPrefs ){
+        MapReduceCommand command = new MapReduceCommand( this , map , reduce , outputTarget , outputType , query );
+        command.setReadPreference(readPrefs);
+        return mapReduce( command );
     }
 
     /**
@@ -1044,7 +1257,7 @@ public abstract class DBCollection {
      * @return
      * @throws MongoException
      */
-    public MapReduceOutput mapReduce( MapReduceCommand command ) throws MongoException{
+    public MapReduceOutput mapReduce( MapReduceCommand command ){
         DBObject cmd = command.toDBObject();
         // if type in inline, then query options like slaveOk is fine
         CommandResult res = null;
@@ -1064,12 +1277,39 @@ public abstract class DBCollection {
      * @return
      * @throws MongoException
      */
-    public MapReduceOutput mapReduce( DBObject command ) throws MongoException{
+    public MapReduceOutput mapReduce( DBObject command ){
         if ( command.get( "mapreduce" ) == null && command.get( "mapReduce" ) == null )
             throw new IllegalArgumentException( "need mapreduce arg" );
         CommandResult res = _db.command( command );
         res.throwOnError();
         return new MapReduceOutput( this , command, res );
+    }
+    
+    /**
+     * performs an aggregation operation
+     *
+     * @param firstOp
+     *          requisite first operation to be performed in the aggregation pipeline
+     *            
+     * @param additionalOps
+     *          additional operations to be performed in the aggregation pipeline
+     * @return The aggregation operation's result set
+     * 
+     */
+    public AggregationOutput aggregate( DBObject firstOp, DBObject ... additionalOps){
+        if (firstOp == null)
+            throw new IllegalArgumentException("aggregate can not accept null pipeline operation");
+        
+        DBObject command = new BasicDBObject("aggregate", _name );
+        
+        List<DBObject> pipelineOps = new ArrayList<DBObject>();
+        pipelineOps.add(firstOp);
+        Collections.addAll(pipelineOps, additionalOps);
+        command.put( "pipeline", pipelineOps );
+        
+        CommandResult res = _db.command( command );
+        res.throwOnError();
+        return new AggregationOutput( command, res );
     }
 
     /**
@@ -1077,6 +1317,7 @@ public abstract class DBCollection {
      *   in the list is the "info document" from MongoDB
      *
      *   @return list of index documents
+     *   @throws MongoException
      */
     public List<DBObject> getIndexInfo() {
         BasicDBObject cmd = new BasicDBObject();
@@ -1098,8 +1339,7 @@ public abstract class DBCollection {
      * @param keys keys of the index
      * @throws MongoException
      */
-    public void dropIndex( DBObject keys )
-        throws MongoException {
+    public void dropIndex( DBObject keys ){
         dropIndexes( genIndexName( keys ) );
     }
 
@@ -1108,14 +1348,14 @@ public abstract class DBCollection {
      * @param name name of index to drop
      * @throws MongoException
      */
-    public void dropIndex( String name )
-        throws MongoException {
+    public void dropIndex( String name ){
         dropIndexes( name );
     }
 
     /**
      * gets the collections statistics ("collstats" command)
      * @return
+     * @throws MongoException
      */
     public CommandResult getStats() {
         return getDB().command(new BasicDBObject("collstats", getName()), getOptions());
@@ -1124,11 +1364,12 @@ public abstract class DBCollection {
     /**
      * returns whether or not this is a capped collection
      * @return
+     * @throws MongoException
      */
     public boolean isCapped() {
         CommandResult stats = getStats();
         Object capped = stats.get("capped");
-        return(capped != null && (Integer)capped == 1);
+        return(capped != null && ( capped.equals(1) || capped.equals(true) ) );
     }
 
     // ------
@@ -1143,8 +1384,6 @@ public abstract class DBCollection {
         _name = name;
         _fullName = _db.getName() + "." + name;
         _options = new Bytes.OptionHolder( _db._options );
-        _decoderFactory = _db.getMongo().getMongoOptions().dbDecoderFactory;
-        _encoderFactory = _db.getMongo().getMongoOptions().dbEncoderFactory;
     }
 
     protected DBObject _checkObject( DBObject o , boolean canBeNull , boolean query ){
@@ -1376,8 +1615,8 @@ public abstract class DBCollection {
     /**
      * makes this query ok to run on a slave node
      *
-     * @deprecated Replaced with ReadPreference.SECONDARY
-     * @see com.mongodb.ReadPreference.SECONDARY
+     * @deprecated Replaced with {@code ReadPreference.secondaryPreferred()}
+     * @see com.mongodb.ReadPreference#secondaryPreferred()
      */
     @Deprecated
     public void slaveOk(){
@@ -1389,7 +1628,7 @@ public abstract class DBCollection {
      * @param option
      */
     public void addOption( int option ){
-        _options.add( option );
+        _options.add(option);
     }
 
     /**
@@ -1397,7 +1636,7 @@ public abstract class DBCollection {
      * @param options
      */
     public void setOptions( int options ){
-        _options.set( options );
+        _options.set(options);
     }
 
     /**
@@ -1415,25 +1654,37 @@ public abstract class DBCollection {
         return _options.get();
     }
 
-    public void setDBDecoderFactory(DBDecoderFactory fact) {
-        if (fact == null)
-            _decoderFactory = _db.getMongo().getMongoOptions().dbDecoderFactory;
-        else
-            _decoderFactory = fact;
+    /**
+     * Set a customer decoder factory for this collection.  Set to null to use the default from MongoOptions.
+     * @param fact  the factory to set.
+     */
+    public synchronized void setDBDecoderFactory(DBDecoderFactory fact) {
+        _decoderFactory = fact;
     }
 
-    public DBDecoderFactory getDBDecoderFactory() {
+    /**
+     * Get the decoder factory for this collection.  A null return value means that the default from MongoOptions
+     * is being used.
+     * @return  the factory
+     */
+    public synchronized DBDecoderFactory getDBDecoderFactory() {
         return _decoderFactory;
     }
 
-    public void setDBEncoderFactory(DBEncoderFactory fact) {
-        if (fact == null)
-            _encoderFactory = _db.getMongo().getMongoOptions().dbEncoderFactory;
-        else
-            _encoderFactory = fact;
+    /**
+     * Set a customer encoder factory for this collection.  Set to null to use the default from MongoOptions.
+     * @param fact  the factory to set.
+     */
+    public synchronized void setDBEncoderFactory(DBEncoderFactory fact) {
+        _encoderFactory = fact;
     }
 
-    public DBEncoderFactory getDBEncoderFactory() {
+    /**
+     * Get the encoder factory for this collection.  A null return value means that the default from MongoOptions
+     * is being used.
+     * @return  the factory
+     */
+    public synchronized DBEncoderFactory getDBEncoderFactory() {
         return _encoderFactory;
     }
 
@@ -1454,5 +1705,4 @@ public abstract class DBCollection {
     private ReflectionDBObject.JavaWrapper _wrapper = null;
 
     final private Set<String> _createdIndexes = new HashSet<String>();
-
 }

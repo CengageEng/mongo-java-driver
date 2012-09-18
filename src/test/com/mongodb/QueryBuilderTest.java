@@ -17,26 +17,70 @@
  */
 package com.mongodb;
 
-import java.util.*;
-import java.util.regex.Pattern;
-import org.testng.annotations.*;
 
+/*
+ * modified April 11, 2012 by Bryan Reinero
+ *  added $near, $nearSphere, $centerSphere and $within $polygon tests
+ */
 import com.mongodb.QueryBuilder.QueryBuilderException;
 import com.mongodb.util.TestCase;
+import org.testng.annotations.Test;
+
+import java.io.IOException;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.regex.Pattern;
 
 /**
  * Test for various methods of <code/>QueryBuilder</code>
  * @author Julson Lim
- *
  */
 public class QueryBuilderTest extends TestCase {
-    private static TestDB _testDB;
-	
-    @BeforeClass
-    public static void setup() {
-        _testDB = new TestDB("queryBuilderTest");
+    private DB _testDB;
+
+    public QueryBuilderTest()
+            throws IOException, MongoException {
+        super();
+        cleanupMongo = new Mongo( "127.0.0.1" );
+        _testDB = cleanupMongo.getDB( "queryBuilderTest" );
+        _testDB.dropDatabase();
     }
-	
+
+    @Test
+    public void elemMatchTest() {
+        DBObject query = QueryBuilder.start("array").elemMatch(QueryBuilder.start("x").is(1).and("y").is(2).get()).get();
+        DBObject expected = new BasicDBObject("array", new BasicDBObject("$elemMatch",
+                new BasicDBObject("x", 1).append("y", 2)));
+        assertEquals(expected, query);
+        // TODO: add integration test
+    }
+
+    @Test
+    public void notTest() {
+        Pattern pattern = Pattern.compile("\\w*");
+        DBObject query = QueryBuilder.start("x").not().regex(pattern).get();
+        DBObject expected = new BasicDBObject("x", new BasicDBObject("$not", pattern));
+        assertEquals(expected, query);
+
+        query = QueryBuilder.start("x").not().regex(pattern).and("y").is("foo").get();
+        expected = new BasicDBObject("x", new BasicDBObject("$not", pattern)).append("y", "foo");
+        assertEquals(expected, query);
+
+        query = QueryBuilder.start("x").not().greaterThan(2).get();
+        expected = new BasicDBObject("x", new BasicDBObject("$not", new BasicDBObject("$gt", 2)));
+        assertEquals(expected, query);
+
+        query = QueryBuilder.start("x").not().greaterThan(2).and("y").is("foo").get();
+        expected = new BasicDBObject("x", new BasicDBObject("$not", new BasicDBObject("$gt", 2))).append("y", "foo");
+        assertEquals(expected, query);
+
+
+        query = QueryBuilder.start("x").not().greaterThan(2).lessThan(0).get();
+        expected = new BasicDBObject("x", new BasicDBObject("$not", new BasicDBObject("$gt", 2).append("$lt", 0)));
+        assertEquals(expected, query);
+
+    }
+
     @Test
     public void greaterThanTest() {
         String key = "x";
@@ -249,6 +293,59 @@ public class QueryBuilderTest extends TestCase {
         DBObject queryTrue = QueryBuilder.start(key).all(Arrays.asList(1,2,3)).size(3).get();
         assertTrue(testQuery(collection, queryTrue));
     }
+    
+    @Test
+    public void nearTest() {
+        String key = "loc";
+        DBCollection collection = _testDB.getCollection("geoSpatial-test");
+        BasicDBObject geoSpatialIndex = new BasicDBObject();
+        geoSpatialIndex.put(key, "2d");
+        collection.ensureIndex(geoSpatialIndex);
+        
+        Double[] coordinates = {(double) 50, (double) 30};
+        saveTestDocument(collection, key, coordinates);
+        
+        DBObject queryTrue = QueryBuilder.start(key).near(45, 45).get();
+        assertTrue(testQuery(collection, queryTrue));
+        
+        queryTrue = QueryBuilder.start(key).near(45, 45, 16).get();
+        assertTrue(testQuery(collection, queryTrue));
+        
+        queryTrue = QueryBuilder.start(key).nearSphere(45, 45).get();
+        assertTrue(testQuery(collection, queryTrue));
+        
+        queryTrue = QueryBuilder.start(key).nearSphere(45, 45, 0.5).get();
+        assertTrue(testQuery(collection, queryTrue));
+        
+        queryTrue = QueryBuilder.start(key).withinCenterSphere(50, 30, 0.5).get();
+        assertTrue(testQuery(collection, queryTrue));
+        
+        if (serverIsAtLeastVersion(1.9)) {
+            ArrayList<Double[]> points = new ArrayList<Double[]>();
+            points.add( new Double[] { (double)30, (double)30 }); 
+            points.add( new Double[] { (double)70, (double)30 });  
+            points.add( new Double[] { (double)70, (double)30 }); 
+            queryTrue = QueryBuilder.start(key).withinPolygon(points).get();
+            assertTrue(testQuery(collection, queryTrue));
+        }
+        
+        try{
+            QueryBuilder.start(key).withinPolygon(null);
+            fail("IllegalArgumentException should have been thrown");
+        }catch(IllegalArgumentException e) {}
+        
+        try{
+            QueryBuilder.start(key).withinPolygon(new ArrayList<Double[]>());
+            fail("IllegalArgumentException should have been thrown");
+        }catch(IllegalArgumentException e) {}
+        
+        try{
+            ArrayList<Double[]> tooFew = new ArrayList<Double[]>();
+            tooFew.add( new Double[] { (double)30, (double)30 });
+            QueryBuilder.start(key).withinPolygon(tooFew);
+            fail("IllegalArgumentException should have been thrown");
+        }catch(IllegalArgumentException e) {}
+    }
 	
     @Test
     public void failureTest() {
@@ -291,12 +388,45 @@ public class QueryBuilderTest extends TestCase {
         
         assertEquals( 2 , c.find( q ).itcount() );
     }
-    
-    @AfterClass
-    public static void tearDown() {
-        _testDB.cleanup();
+
+    @Test
+    public void testAnd() {
+        if (!serverIsAtLeastVersion(2.0)) {
+            return;
+        }
+
+        DBCollection c = _testDB.getCollection( "and1" );
+        c.drop();
+        c.insert( new BasicDBObject( "a" , 1 ).append( "b" , 1) );
+        c.insert( new BasicDBObject( "b" , 1 ) );
+        
+        DBObject q = QueryBuilder.start()
+            .and( new BasicDBObject( "a" , 1 ) , 
+                  new BasicDBObject( "b" , 1 ) )
+            .get();
+        
+        assertEquals( 1 , c.find( q ).itcount() );
     }
-	
+
+    @Test
+    public void testMultipleAnd() {
+        if (!serverIsAtLeastVersion(2.0)) {
+            return;
+        }
+
+        DBCollection c = _testDB.getCollection( "and1" );
+        c.drop();
+        c.insert( new BasicDBObject( "a" , 1 ).append( "b" , 1) );
+        c.insert( new BasicDBObject( "b" , 1 ) );
+
+        DBObject q = QueryBuilder.start()
+                .and( new BasicDBObject( "a" , 1 ) ,
+                        new BasicDBObject( "b" , 1 ) )
+                .get();
+
+        assertEquals( 1 , c.find( q ).itcount() );
+    }
+
     /**
      * Convenience method that
      * creates a new MongoDB Document with a key-value pair and saves it inside the specified collection
@@ -314,5 +444,4 @@ public class QueryBuilderTest extends TestCase {
         DBCursor cursor = collection.find(query);
         return cursor.hasNext();
     }
-		
 }

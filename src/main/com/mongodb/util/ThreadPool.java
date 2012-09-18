@@ -24,6 +24,12 @@ import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.atomic.AtomicInteger;
 
+/**
+ * A thread pool implementation.
+ *
+ * @deprecated This class is no longer in use and should not have been public.  It may be removed in a future release.
+ */
+@Deprecated
 public abstract class ThreadPool<T> {
 
     /** Initializes a new thread pool with a given name and number of threads.
@@ -92,8 +98,6 @@ public abstract class ThreadPool<T> {
         }
 
         public void uncaughtException( Thread t, Throwable e ){
-            System.err.println( "ThreadPool [" + _name + "] uncaughtException" );
-            e.printStackTrace();
             for ( int i=0; i<_threads.size(); i++ ){
                 if ( _threads.get( i ) == t ){
                     _threads.remove( i );

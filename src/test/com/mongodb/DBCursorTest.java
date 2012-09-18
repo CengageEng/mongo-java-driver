@@ -16,23 +16,72 @@
 
 package com.mongodb;
 
-import java.io.IOException;
-import java.util.Iterator;
-
-import java.util.logging.Level;
-import java.util.logging.Logger;
+import com.mongodb.util.TestCase;
 import org.testng.annotations.Test;
 
-import com.mongodb.util.TestCase;
+import java.io.IOException;
+import java.net.UnknownHostException;
+import java.util.Iterator;
+import java.util.concurrent.Callable;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 
 public class DBCursorTest extends TestCase {
 
-    public DBCursorTest()
-        throws IOException , MongoException {
+    public DBCursorTest() throws IOException , MongoException {
         super();
-	cleanupMongo = new Mongo( "127.0.0.1" );
-	cleanupDB = "com_mongodb_unittest_DBCursorTest";
+	    cleanupMongo = new Mongo( "127.0.0.1" );
+	    cleanupDB = "com_mongodb_unittest_DBCursorTest";
         _db = cleanupMongo.getDB( cleanupDB );
+    }
+
+    @Test(groups = {"basic"})
+    public void testGetServerAddressLoop() {
+
+        final DBCollection c = _db.getCollection("getServerAddress");
+        c.drop();
+
+        // Insert some data.
+        for (int i=0; i < 10; i++) c.insert(new BasicDBObject("one", "two"));
+
+        final DBCursor cur = c.find();
+
+        while (cur.hasNext()) {
+            cur.next();
+            assertNotNull(cur.getServerAddress());
+        }
+    }
+
+    @Test(groups = {"basic"})
+    public void testGetServerAddressQuery() {
+
+        final DBCollection c = _db.getCollection("getServerAddress");
+        c.drop();
+
+        // Insert some data.
+        for (int i=0; i < 10; i++) c.insert(new BasicDBObject("one", "two"));
+
+        final DBCursor cur = c.find();
+        cur.hasNext();
+        assertNotNull(cur.getServerAddress());
+    }
+
+    @Test(groups = {"basic"})
+    public void testGetServerAddressQuery1() {
+
+        final DBCollection c = _db.getCollection("getServerAddress");
+        c.drop();
+
+        // Insert some data.
+        for (int i=0; i < 10; i++) c.insert(new BasicDBObject("one", i));
+
+        final DBCursor cur = c.find(new BasicDBObject("one", 9));
+        cur.hasNext();
+        assertNotNull(cur.getServerAddress());
     }
 
     @Test(groups = {"basic"})
@@ -96,6 +145,7 @@ public class DBCursorTest extends TestCase {
 //        c.drop();
 //    }
 
+
     @Test//(enabled = false)
     public void testTailable() {
         DBCollection c = _db.getCollection("tail1");
@@ -120,78 +170,47 @@ public class DBCursorTest extends TestCase {
     }
 
     @Test//(enabled = false)
-    public void testTailableAwait() {
+    public void testTailableAwait() throws ExecutionException, TimeoutException, InterruptedException {
         DBCollection c = _db.getCollection("tail1");
         c.drop();
         _db.createCollection("tail1", new BasicDBObject("capped", true).append("size", 10000));
         for (int i = 0; i < 10; i++) {
-            c.save(new BasicDBObject("x", i));
+            c.save(new BasicDBObject("x", i), WriteConcern.SAFE);
         }
 
         final DBCursor cur = c.find().sort(new BasicDBObject("$natural", 1)).addOption(Bytes.QUERYOPTION_TAILABLE | Bytes.QUERYOPTION_AWAITDATA);
-        Thread t = new Thread(new Runnable() {
-            public void run() {
-                // the following call will block on the last hasNext
-                int i = 0;
-                while (cur.hasNext()) {
-                    cur.next();
-                    if (++i > 10)
-                        break;
+        Callable<Object> callable = new Callable<Object>() {
+            @Override
+            public Object call() throws Exception {
+                try {
+                    // the following call will block on the last hasNext
+                    int i = 0;
+                    while (cur.hasNext()) {
+                        DBObject obj = cur.next();
+                        i++;
+                        if (i > 10)
+                            return obj.get("x");
+                    }
+
+                    return null;
+                } catch (Throwable e) {
+                    return e;
                 }
             }
-        });
-        t.start();
+        };
 
-        try {
-            Thread.sleep(5000);
-        } catch (InterruptedException ex) {
-        }
-        assert (t.isAlive());
+        ExecutorService es = Executors.newSingleThreadExecutor();
+        Future<Object> future = es.submit(callable);
+
+        Thread.sleep(5000);
+        assertTrue(!future.isDone());
 
         // this doc should unblock thread
-        c.save(new BasicDBObject("x", 12));
-        try {
-            t.join(100);
-        } catch (InterruptedException ex) {
-        }
+        c.save(new BasicDBObject("x", 10), WriteConcern.SAFE);
+        Object retVal = future.get(5, TimeUnit.SECONDS);
+        assertEquals(10, retVal);
     }
     
-    @Test
-    public void testBig2(){
-        DBCollection c = _db.getCollection("big2");
-        c.drop();
-
-        String bigString;
-        {
-            StringBuilder buf = new StringBuilder( 16000 );
-            for ( int i=0; i<16000; i++ )
-                buf.append( "x" );
-            bigString = buf.toString();
-        }
-
-        int numToInsert = ( 15 * 1024 * 1024 ) / bigString.length();
-
-        for ( int i=0; i<numToInsert; i++ )
-            c.save( BasicDBObjectBuilder.start().add( "x" , i ).add( "s" , bigString ).get() );
-
-        assert( 800 < numToInsert );
-
-        assertEquals( numToInsert , c.find().count() );
-        long start = 0;
-
-        start = System.currentTimeMillis();
-        c.find().batchSize( 100 ).toArray();
-        long elapsed1 = System.currentTimeMillis() - start;
-        start = System.currentTimeMillis();
-        c.find().batchSize( 100 ).toArray(400);
-
-        long elapsed2 = System.currentTimeMillis() - start;
-        assertTrue( (elapsed1 - elapsed2 > 0/*ms*/) , String.format( "toArray run in %sms, toArray(400) in %sms", elapsed1, elapsed2 ));
-    }
-
-
-    /*
-    TODO: Fix test... broken build
     @Test
     public void testBig(){
         DBCollection c = _db.getCollection("big1");
@@ -236,7 +255,6 @@ public class DBCursorTest extends TestCase {
         assertEquals( numToInsert , _count( c.find( null , null).skip(  0 ).batchSize( 5 ) ) );
         assertEquals( 5 , _count( c.find( null , null).skip(  0 ).batchSize( -5 ) ) );
     }
-    */
 
     @SuppressWarnings("unchecked")
 	int _count( Iterator i ){
@@ -328,12 +346,12 @@ public class DBCursorTest extends TestCase {
         DBCollection c = _db.getCollection( "largeBatch1" );
         c.drop();
 
-        int total = 1000000;
-        int batch = 100000;
+        int total = 50000;
+        int batch = 10000;
         for ( int i=0; i<total; i++ )
             c.save( new BasicDBObject( "x" , i ) );
 
-        DBCursor cursor = c.find().batchSize( batch );
+        DBCursor cursor = c.find().batchSize(batch);
         assertEquals( total , cursor.itcount() );
         assertEquals( total/batch + 1, cursor.getSizes().size());
     }
@@ -408,6 +426,86 @@ public class DBCursorTest extends TestCase {
         assertEquals( 20 , cur.itcount() );
     }
 
+    @Test
+    public void testSort(){
+        DBCollection c = _db.getCollection( "SortTest" );
+        c.drop();
+
+        for ( int i=0; i<1000; i++ )
+            c.save( new BasicDBObject( "x" , i ).append("y", 1000-i));
+
+        //x ascending
+        DBCursor cur = c.find().sort( new BasicDBObject("x", 1));
+        int curmax = -100;
+        while(cur.hasNext()){
+        	int val = (Integer)cur.next().get("x");
+        	assertTrue( val > curmax);
+        	curmax = val;
+        }
+        
+        //x desc
+        cur = c.find().sort( new BasicDBObject("x", -1));
+        curmax = 9999;
+        while(cur.hasNext()){
+        	int val = (Integer)cur.next().get("x");
+        	assertTrue( val < curmax);
+        	curmax = val;
+        }
+        
+        //query and sort
+        cur = c.find( QueryBuilder.start("x").greaterThanEquals(500).get()).sort(new BasicDBObject("y", 1));
+        assertEquals(500, cur.count());
+        curmax = -100;
+        while(cur.hasNext()){
+        	int val = (Integer)cur.next().get("y");
+        	assertTrue( val > curmax);
+        	curmax = val;
+        }
+    }
+
+    @Test
+    public void testHasFinalizer() throws UnknownHostException {
+        DBCollection c = _db.getCollection( "HasFinalizerTest" );
+        c.drop();
+
+        for ( int i=0; i<1000; i++ )
+            c.save( new BasicDBObject("_id", i), WriteConcern.SAFE);
+
+        // finalizer is on by default so after calling hasNext should report that it has one
+        DBCursor cursor = c.find();
+        assertFalse(cursor.hasFinalizer());
+        cursor.hasNext();
+        assertTrue(cursor.hasFinalizer());
+        cursor.close();
+
+        // no finalizer if there is no cursor, as there should not be for a query with only one result
+        cursor = c.find(new BasicDBObject("_id", 1));
+        cursor.hasNext();
+        assertFalse(cursor.hasFinalizer());
+        cursor.close();
+
+        // no finalizer if there is no cursor, as there should not be for a query with negative batch size
+        cursor = c.find();
+        cursor.batchSize(-1);
+        cursor.hasNext();
+        assertFalse(cursor.hasFinalizer());
+        cursor.close();
+
+        // finally, no finalizer if disabled in mongo options
+        MongoOptions mongoOptions = new MongoOptions();
+        mongoOptions.cursorFinalizerEnabled = false;
+        Mongo m = new Mongo("127.0.0.1", mongoOptions);
+        try {
+            c = m.getDB(cleanupDB).getCollection("HasFinalizerTest");
+            cursor = c.find();
+            cursor.hasNext();
+            assertFalse(cursor.hasFinalizer());
+            cursor.close();
+        } finally {
+            m.close();
+        }
+    }
+    
     final DB _db;
 
     public static void main( String args[] )

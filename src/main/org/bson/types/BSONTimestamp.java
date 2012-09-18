@@ -18,6 +18,7 @@
 
 package org.bson.types;
 
+import java.io.Serializable;
 import java.util.Date;
 
 /**
@@ -26,10 +27,12 @@ import java.util.Date;
  * <b>time</b> is seconds since epoch
  * <b>inc<b> is an ordinal
  */
-public class BSONTimestamp {
+public class BSONTimestamp implements Comparable<BSONTimestamp>, Serializable {
+
+    private static final long serialVersionUID = -3268482672267936464L;
     
     static final boolean D = Boolean.getBoolean( "DEBUG.DBTIMESTAMP" );
-    
+
     public BSONTimestamp(){
         _inc = 0;
         _time = null;
@@ -56,7 +59,26 @@ public class BSONTimestamp {
     public String toString(){
         return "TS time:" + _time + " inc:" + _inc;
     }
-
+    
+    @Override
+    public int compareTo(BSONTimestamp ts) {
+        if(getTime() != ts.getTime()) {
+            return getTime() - ts.getTime();
+        }
+        else{
+            return getInc() - ts.getInc();
+        }
+    }
+    
+    @Override
+    public int hashCode() {
+        final int prime = 31;
+        int result = 1;
+        result = prime * result + _inc;
+        result = prime * result + getTime();
+        return result;
+    }
+    
     @Override
     public boolean equals(Object obj) {
         if (obj == this)
@@ -70,4 +92,5 @@ public class BSONTimestamp {
 
     final int _inc;
     final Date _time;
+
 }

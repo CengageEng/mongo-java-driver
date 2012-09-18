@@ -18,6 +18,10 @@
 
 package com.mongodb.util;
 
+import com.mongodb.BasicDBObject;
+import com.mongodb.CommandResult;
+import com.mongodb.Mongo;
+
 import java.io.BufferedReader;
 import java.io.InputStreamReader;
 import java.lang.reflect.InvocationTargetException;
@@ -26,10 +30,8 @@ import java.lang.reflect.Method;
 import java.util.ArrayList;
 import java.util.List;
 
-import com.mongodb.Mongo;
-
 public class TestCase extends MyAsserts {
-    
+
     static class Test {
         Test( Object o , Method m ){
             _o = o;
@@ -131,13 +133,18 @@ public class TestCase extends MyAsserts {
     public void add( TestCase tc ){
         _tests.addAll( tc._tests );
     }
+
     public String cleanupDB = null;
     public Mongo cleanupMongo = null;
+
     @org.testng.annotations.AfterClass
-    public void cleanup(){
-	if ((cleanupMongo != null) && (cleanupDB != null)) {
-	    cleanupMongo.dropDatabase(cleanupDB);
-	}
+    public void cleanup() {
+        if (cleanupMongo != null) {
+            if (cleanupDB != null) {
+                cleanupMongo.dropDatabase(cleanupDB);
+            }
+            cleanupMongo.close();
+        }
     }
 
     /**
@@ -164,7 +171,7 @@ public class TestCase extends MyAsserts {
             else
                 errors.add( r );
         }
-	cleanup();
+        cleanup();
         System.out.println( "\n----" );
 
         int pass = _tests.size() - ( errors.size() + fails.size() );
@@ -230,6 +237,87 @@ public class TestCase extends MyAsserts {
             throw new RuntimeException( e );
         }
     }
+
+    /**
+     *
+     * @param version  must be a major version, e.g. 1.8, 2,0, 2.2
+     * @return true if server is at least specified version
+     */
+    protected boolean serverIsAtLeastVersion(double version) {
+        String serverVersion = (String) cleanupMongo.getDB("admin").command("serverStatus").get("version");
+        return Double.parseDouble(serverVersion.substring(0, 3)) >= version;
+    }
+
+    /**
+     *
+     * @param mongo the connection
+     * @return true if connected to a standalone server
+     */
+    protected boolean isStandalone(Mongo mongo) {
+        return runReplicaSetStatusCommand(mongo) == null;
+    }
+
+    @SuppressWarnings({"unchecked"})
+    protected String getPrimaryAsString(Mongo mongo) {
+        return getMemberNameByState(mongo, "primary");
+    }
+
+    @SuppressWarnings({"unchecked"})
+    protected String getASecondaryAsString(Mongo mongo) {
+        return getMemberNameByState(mongo, "secondary");
+    }
+
+    @SuppressWarnings({"unchecked"})
+    protected String getMemberNameByState(Mongo mongo, String stateStrToMatch) {
+        CommandResult replicaSetStatus = runReplicaSetStatusCommand(mongo);
+
+        for (final BasicDBObject member : (List<BasicDBObject>) replicaSetStatus.get("members")) {
+            String hostnameAndPort = member.getString("name");
+            if (!hostnameAndPort.contains(":"))
+                hostnameAndPort = hostnameAndPort + ":27017";
+
+            final String stateStr = member.getString("stateStr");
+
+            if (stateStr.equalsIgnoreCase(stateStrToMatch))
+                return hostnameAndPort;
+        }
+
+        throw new IllegalStateException("No member found in state " + stateStrToMatch);
+    }
+
+    @SuppressWarnings("unchecked")
+    protected int getReplicaSetSize(Mongo mongo) {
+        int size = 0;
+
+        CommandResult replicaSetStatus = runReplicaSetStatusCommand(mongo);
+
+        for (final BasicDBObject member : (List<BasicDBObject>) replicaSetStatus.get("members")) {
+
+            final String stateStr = member.getString("stateStr");
+
+            if (stateStr.equals("PRIMARY") || stateStr.equals("SECONDARY"))
+                size++;
+        }
+
+        return size;
+    }
+
+    
+    protected CommandResult runReplicaSetStatusCommand(final Mongo pMongo) {
+        // Check to see if this is a replica set... if not, get out of here.
+        final CommandResult result = pMongo.getDB("admin").command(new BasicDBObject("replSetGetStatus", 1));
+
+        final String errorMsg = result.getErrorMessage();
+
+        if (errorMsg != null && errorMsg.indexOf("--replSet") != -1) {
+            System.err.println("---- SecondaryReadTest: This is not a replica set - not testing secondary reads");
+            return null;
+        }
+
+        return result;
+    }
+
+
 
     public static void main( String args[] )
         throws Exception {

@@ -18,6 +18,8 @@
 
 package com.mongodb;
 
+import org.bson.io.PoolOutputBuffer;
+
 import java.net.UnknownHostException;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -26,83 +28,63 @@ import java.util.List;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 
-import org.bson.io.PoolOutputBuffer;
-
 /**
- * A database connection with internal pooling.
- * For most application, you should have 1 Mongo instance for the entire JVM.
- *
- * The following are equivalent, and all connect to the
- * local database running on the default port:
- *
- * <blockquote><pre>
- * Mongo mongo1 = new Mongo( "127.0.0.1" );
- * Mongo mongo2 = new Mongo( "127.0.0.1", 27017 );
- * Mongo mongo3 = new Mongo( new DBAddress( "127.0.0.1", 27017, "test" ) );
- * Mongo mongo4 = new Mongo( new ServerAddress( "127.0.0.1") );
- * </pre></blockquote>
- *
- * Mongo instances have connection pooling built in - see the requestStart
- * and requestDone methods for more information.
- * http://www.mongodb.org/display/DOCS/Java+Driver+Concurrency
- *
- * <h3>Connecting to a Replica Pair</h3>
+ * A database connection with internal connection pooling. For most applications, you should have one Mongo instance
+ * for the entire JVM.
+ * <p>
+ * The following are equivalent, and all connect to the local database running on the default port:
+ * <pre>
+ * Mongo mongo1 = new Mongo();
+ * Mongo mongo1 = new Mongo("localhost");
+ * Mongo mongo2 = new Mongo("localhost", 27017);
+ * Mongo mongo4 = new Mongo(new ServerAddress("localhost"));
+ * </pre>
  * <p>
  * You can connect to a
- * <a href="http://www.mongodb.org/display/DOCS/Replica+Pairs">replica pair</a>
- * using the Java driver by passing two DBAddresses to the Mongo constructor.
- * For example:
- * </p>
- * <blockquote><pre>
- * DBAddress left = new DBAddress("127.0.0.1:27017/test");
- * DBAddress right = new DBAddress("127.0.0.1:27018/test");
- *
- * Mongo mongo = new Mongo(left, right);
- * </pre></blockquote>
- *
+ * <a href="http://www.mongodb.org/display/DOCS/Replica+Sets">replica set</a> using the Java driver by passing
+ * a ServerAddress list to the Mongo constructor. For example:
+ * <pre>
+ * Mongo mongo = new Mongo(Arrays.asList(
+ *   new ServerAddress("localhost", 27017),
+ *   new ServerAddress("localhost", 27018),
+ *   new ServerAddress("localhost", 27019)));
+ * </pre>
+ * You can connect to a sharded cluster using the same constructor.  Mongo will auto-detect whether the servers are
+ * a list of replica set members or a list of mongos servers.
  * <p>
- * If the master of a replica pair goes down, there will be a brief lag before
- * the slave becomes master.  Thus, your application should be prepared to catch
- * the exceptions that might be thrown in such a case: IllegalArgumentException,
- * MongoException, and MongoException.Network (depending on when the connection
- * drops).
- * </p>
+ * By default, all read and write operations will be made on the primary,
+ * but it's possible to read from secondaries by changing the read preference:
  * <p>
- * Once the slave becomes master, the driver will begin using that connection
- * as the master connection and the exceptions will stop being thrown.
- * </p>
- *
- * <h3>Connecting to a Replica Set</h3>
+ * <pre>
+ * mongo.setReadPreference(ReadPreference.secondary());
+ * </pre>
+ * By default, write operations will not throw exceptions on failure, but that is easily changed too:
  * <p>
- * You can connect to a
- * <a href="http://www.mongodb.org/display/DOCS/Replica+Sets">replica set</a>
- * using the Java driver by passing several a list if ServerAddress to the
- * Mongo constructor.
- * For example:
- * </p>
- * <blockquote><pre>
- * List<ServerAddress> addrs = new ArrayList<ServerAddress>();
- * addrs.add( new ServerAddress( "127.0.0.1" , 27017 ) );
- * addrs.add( new ServerAddress( "127.0.0.1" , 27018 ) );
- * addrs.add( new ServerAddress( "127.0.0.1" , 27019 ) );
+ * <pre>
+ * mongo.setWriteConcern(WriteConcern.SAFE);
+ * </pre>
  *
- * Mongo mongo = new Mongo( addrs );
- * </pre></blockquote>
- *
- * <p>
- * By default, all read and write operations will be made on the master.
- * But it's possible to read from the slave(s) by using slaveOk:
- * </p>
- * <blockquote><pre>
- * mongo.slaveOk();
- * </pre></blockquote>
+ * @see com.mongodb.ReadPreference
+ * @see com.mongodb.WriteConcern
  */
 public class Mongo {
 
-    // Make sure you don't change the format of these two lines. A preprocessing regexp
+    // Make sure you don't change the format of these two static variables. A preprocessing regexp
     // is applied and updates the version based on configuration in build.properties.
+
+    /**
+     * @deprecated Replaced by <code>Mongo.getMajorVersion()</code>
+     */
+    @Deprecated
     public static final int MAJOR_VERSION = 2;
-    public static final int MINOR_VERSION = 7;
+
+    /**
+     * @deprecated Replaced by <code>Mongo.getMinorVersion()</code>
+     */
+    @Deprecated
+    public static final int MINOR_VERSION = 9;
+
+    private static final String FULL_VERSION = "2.9.1";
 
     static int cleanerIntervalMS;
     static {
@@ -110,9 +92,26 @@ public class Mongo {
     }
 
     /**
+     * Gets the major version of this library
+     * @return the major version, e.g. 2
+     */
+    public static int getMajorVersion() {
+        return MAJOR_VERSION;
+    }
+
+    /**
+     * Gets the minor version of this library
+     * @return the minor version, e.g. 8
+     */
+    public static int getMinorVersion() {
+        return MINOR_VERSION;
+    }
+
+    /**
      * returns a database object
      * @param addr the database address
      * @return
+     * @throws MongoException
      */
     public static DB connect( DBAddress addr ){
         return new Mongo( addr ).getDB( addr.getDBName() );
@@ -124,7 +123,7 @@ public class Mongo {
      * @throws MongoException
      */
     public Mongo()
-        throws UnknownHostException , MongoException {
+        throws UnknownHostException {
         this( new ServerAddress() );
     }
 
@@ -135,7 +134,7 @@ public class Mongo {
      * @throws MongoException
      */
     public Mongo( String host )
-        throws UnknownHostException , MongoException {
+        throws UnknownHostException{
         this( new ServerAddress( host ) );
     }
 
@@ -147,7 +146,7 @@ public class Mongo {
      * @throws MongoException
      */
     public Mongo( String host , MongoOptions options )
-        throws UnknownHostException , MongoException {
+        throws UnknownHostException {
         this( new ServerAddress( host ) , options );
     }
 
@@ -159,7 +158,7 @@ public class Mongo {
      * @throws MongoException
      */
     public Mongo( String host , int port )
-        throws UnknownHostException , MongoException {
+        throws UnknownHostException {
         this( new ServerAddress( host , port ) );
     }
 
@@ -167,13 +166,11 @@ public class Mongo {
      * Creates a Mongo instance based on a (single) mongodb node
      * @see com.mongodb.ServerAddress
      * @param addr the database address
-     * @throws MongoException
+     * @throws MongoException 
      */
-    public Mongo( ServerAddress addr )
-        throws MongoException {
-        this( addr , new MongoOptions() );
+    public Mongo( ServerAddress addr ) {
+        this(addr, new MongoOptions());
     }
-
 
     /**
      * Creates a Mongo instance based on a (single) mongo node using a given ServerAddress
@@ -182,16 +179,20 @@ public class Mongo {
      * @param options default query options
      * @throws MongoException
      */
-    public Mongo( ServerAddress addr , MongoOptions options )
-        throws MongoException {
+    public Mongo( ServerAddress addr , MongoOptions options ) {
         _addr = addr;
         _addrs = null;
         _options = options;
         _applyMongoOptions();
         _connector = new DBTCPConnector( this , _addr );
         _connector.start();
-        _cleaner = new DBCleanerThread();
-        _cleaner.start();
+
+        if (options.cursorFinalizerEnabled) {
+           _cleaner = new CursorCleanerThread();
+           _cleaner.start();
+        } else {
+           _cleaner = null;
+        }
     }
 
     /**
@@ -204,9 +205,9 @@ public class Mongo {
      * @param right right side of the pair
      * @throws MongoException
      */
-    public Mongo( ServerAddress left , ServerAddress right )
-        throws MongoException {
-        this( left , right , new MongoOptions() );
+    @Deprecated
+    public Mongo( ServerAddress left , ServerAddress right ) {
+        this(left, right, new MongoOptions());
     }
 
     /**
@@ -220,8 +221,8 @@ public class Mongo {
      * @param options
      * @throws MongoException
      */
-    public Mongo( ServerAddress left , ServerAddress right , MongoOptions options )
-        throws MongoException {
+    @Deprecated
+    public Mongo( ServerAddress left , ServerAddress right , MongoOptions options ) {
         _addr = null;
         _addrs = Arrays.asList( left , right );
         _options = options;
@@ -229,44 +230,63 @@ public class Mongo {
         _connector = new DBTCPConnector( this , _addrs );
         _connector.start();
 
-        _cleaner = new DBCleanerThread();
-        _cleaner.start();
+        if (options.cursorFinalizerEnabled) {
+            _cleaner = new CursorCleanerThread();
+            _cleaner.start();
+        } else {
+            _cleaner = null;
+        }
     }
 
     /**
-     * <p>Creates a Mongo based on a replica set, or pair.
-     * It will find all members (the master will be used by default).</p>
+     * Creates a Mongo based on a list of replica set members or a list of mongos.
+     * It will find all members (the master will be used by default). If you pass in a single server in the list,
+     * the driver will still function as if it is a replica set. If you have a standalone server,
+     * use the Mongo(ServerAddress) constructor.
+     * <p>
+     * If this is a list of mongos servers, it will pick the closest (lowest ping time) one to send all requests to,
+     * and automatically fail over to the next server if the closest is down.
+     *
      * @see com.mongodb.ServerAddress
-     * @param replicaSetSeeds Put as many servers as you can in the list and
-     * the system will figure out the rest.
+     * @param seeds Put as many servers as you can in the list and the system will figure out the rest.  This can
+     *              either be a list of mongod servers in the same replica set or a list of mongos servers in the same
+     *              sharded cluster.
      * @throws MongoException
      */
-    public Mongo( List<ServerAddress> replicaSetSeeds )
-        throws MongoException {
-        this( replicaSetSeeds , new MongoOptions() );
+    public Mongo( List<ServerAddress> seeds ) {
+        this( seeds , new MongoOptions() );
     }
 
     /**
-     * <p>Creates a Mongo based on a replica set, or pair.
-     * It will find all members (the master will be used by default).</p>
+     * Creates a Mongo based on a list of replica set members or a list of mongos.
+     * It will find all members (the master will be used by default). If you pass in a single server in the list,
+     * the driver will still function as if it is a replica set. If you have a standalone server,
+     * use the Mongo(ServerAddress) constructor.
+     * <p>
+     * If this is a list of mongos servers, it will pick the closest (lowest ping time) one to send all requests to,
+     * and automatically fail over to the next server if the closest is down.
+     *
      * @see com.mongodb.ServerAddress
-     * @param replicaSetSeeds put as many servers as you can in the list.
-     *                       the system will figure the rest out
-     * @param options default query options
-     * @throws MongoException
+     * @param seeds Put as many servers as you can in the list and the system will figure out the rest.  This can
+     *              either be a list of mongod servers in the same replica set or a list of mongos servers in the same
+     *              sharded cluster.
+     * @param options for configuring this Mongo instance
+     * @throws MongoException 
      */
-    public Mongo( List<ServerAddress> replicaSetSeeds , MongoOptions options )
-        throws MongoException {
-
+    public Mongo( List<ServerAddress> seeds , MongoOptions options ) {
         _addr = null;
-        _addrs = replicaSetSeeds;
+        _addrs = seeds;
         _options = options;
         _applyMongoOptions();
-        _connector = new DBTCPConnector( this , _addrs );
+        _connector = new DBTCPConnector( this , _addrs);
         _connector.start();
 
-        _cleaner = new DBCleanerThread();
-        _cleaner.start();
+        if (options.cursorFinalizerEnabled) {
+            _cleaner = new CursorCleanerThread();
+            _cleaner.start();
+        } else {
+            _cleaner = null;
+        }
     }
 
     /**
@@ -275,16 +295,16 @@ public class Mongo {
      * @param uri
      * @see MongoURI
      * <p>examples:
-     *   <li>mongodb://127.0.0.1</li>
-     *   <li>mongodb://fred:foobar@127.0.0.1/</li>
+     *   <li>mongodb://localhost</li>
+     *   <li>mongodb://fred:foobar@localhost/</li>
      *  </p>
-     *  @throws MongoException
+     * @throws MongoException
      * @throws UnknownHostException
      * @dochub connections
      */
 
     public Mongo( MongoURI uri )
-        throws MongoException , UnknownHostException {
+        throws UnknownHostException {
 
         _options = uri.getOptions();
         _applyMongoOptions();
@@ -304,8 +324,12 @@ public class Mongo {
         }
 
         _connector.start();
-        _cleaner = new DBCleanerThread();
-        _cleaner.start();
+        if (_options.cursorFinalizerEnabled) {
+            _cleaner = new CursorCleanerThread();
+            _cleaner.start();
+        } else {
+            _cleaner = null;
+        }
     }
 
     /**
@@ -340,8 +364,7 @@ public class Mongo {
      * @return
      * @throws MongoException
      */
-    public List<String> getDatabaseNames()
-        throws MongoException {
+    public List<String> getDatabaseNames(){
 
         BasicDBObject cmd = new BasicDBObject();
         cmd.put("listDatabases", 1);
@@ -366,18 +389,17 @@ public class Mongo {
      * @param dbName name of database to drop
      * @throws MongoException
      */
-    public void dropDatabase(String dbName)
-        throws MongoException {
+    public void dropDatabase(String dbName){
 
         getDB( dbName ).dropDatabase();
     }
 
     /**
      * gets this driver version
-     * @return
+     * @return the full version string of this driver, e.g. "2.8.0"
      */
     public String getVersion(){
-        return MAJOR_VERSION + "." + MINOR_VERSION;
+        return FULL_VERSION;
     }
 
     /**
@@ -436,6 +458,7 @@ public class Mongo {
      * Gets the list of server addresses currently seen by the connector.
      * This includes addresses auto-discovered from a replica set.
      * @return
+     * @throws MongoException 
      */
     public List<ServerAddress> getServerAddressList() {
         return _connector.getServerAddressList();
@@ -446,12 +469,19 @@ public class Mongo {
      * Once called, this Mongo instance can no longer be used.
      */
     public void close(){
-        _connector.close();
-        _cleaner.interrupt();
+
         try {
-            _cleaner.join();
-        } catch (InterruptedException e) {
-            //end early
+            _connector.close();
+        } catch (final Throwable t) { /* nada */ }
+
+        if (_cleaner != null) {
+            _cleaner.interrupt();
+
+            try {
+                _cleaner.join();
+            } catch (InterruptedException e) {
+                //end early
+            }
         }
     }
 
@@ -494,10 +524,10 @@ public class Mongo {
     }
 
     /**
-     * makes it possible to run read queries on slave nodes
+     * makes it possible to run read queries on secondary nodes
      *
-     * @deprecated Replaced with ReadPreference.SECONDARY
-     * @see com.mongodb.ReadPreference.SECONDARY
+     * @deprecated Replaced with {@code ReadPreference.secondaryPreferred()}
+     * @see ReadPreference#secondaryPreferred()
      */
     @Deprecated
     public void slaveOk(){
@@ -541,8 +571,13 @@ public class Mongo {
      */
     @SuppressWarnings("deprecation")
     void _applyMongoOptions() {
-        if (_options.slaveOk) slaveOk();
-        setWriteConcern( _options.getWriteConcern() );
+        if (_options.slaveOk) {
+            slaveOk();
+        }
+        if (_options.getReadPreference() != null) {
+           setReadPreference(_options.getReadPreference());
+        }
+        setWriteConcern(_options.getWriteConcern());
     }
 
     /**
@@ -557,12 +592,19 @@ public class Mongo {
      * Note that this value may change over time depending on which server is master.
      * If the size is not known yet, a request may be sent to the master server
      * @return the maximum size
+     * @throws MongoException
      */
     public int getMaxBsonObjectSize() {
         int maxsize = _connector.getMaxBsonObjectSize();
-        if (maxsize == 0)
-            maxsize = _connector.fetchMaxBsonObjectSize();
+        if (maxsize == 0) {
+            _connector.initDirectConnection();
+        }
+        maxsize = _connector.getMaxBsonObjectSize();
         return maxsize > 0 ? maxsize : Bytes.MAX_OBJECT_SIZE;
+    }
+
+    boolean isMongosConnection() {
+        return _connector.isMongosConnection();
     }
 
     final ServerAddress _addr;
@@ -571,9 +613,9 @@ public class Mongo {
     final DBTCPConnector _connector;
     final ConcurrentMap<String,DB> _dbs = new ConcurrentHashMap<String,DB>();
     private WriteConcern _concern = WriteConcern.NORMAL;
-    private ReadPreference _readPref = ReadPreference.PRIMARY;
+    private ReadPreference _readPref = ReadPreference.primary();
     final Bytes.OptionHolder _netOptions = new Bytes.OptionHolder( null );
-    final DBCleanerThread _cleaner;
+    final CursorCleanerThread _cleaner;
 
     org.bson.util.SimplePool<PoolOutputBuffer> _bufferPool =
         new org.bson.util.SimplePool<PoolOutputBuffer>( 1000 ){
@@ -589,6 +631,7 @@ public class Mongo {
      * This is done automatically by the server at intervals, but can be forced for better reliability. 
      * @param async if true, the fsync will be done asynchronously on the server.
      * @return 
+     * @throws MongoException
      */
     public CommandResult fsync(boolean async) {
         DBObject cmd = new BasicDBObject("fsync", 1);
@@ -602,6 +645,7 @@ public class Mongo {
      * Forces the master server to fsync the RAM data to disk, then lock all writes.
      * The database will be read-only after this command returns.
      * @return 
+     * @throws MongoException
      */
     public CommandResult fsyncAndLock() {
         DBObject cmd = new BasicDBObject("fsync", 1);
@@ -613,6 +657,7 @@ public class Mongo {
      * Unlocks the database, allowing the write operations to go through.
      * This command may be asynchronous on the server, which means there may be a small delay before the database becomes writable.
      * @return 
+     * @throws MongoException
      */
     public DBObject unlock() {
         DB db = getDB("admin");
@@ -623,6 +668,7 @@ public class Mongo {
     /**
      * Returns true if the database is locked (read-only), false otherwise.
      * @return 
+     * @throws MongoException
      */
     public boolean isLocked() {
         DB db = getDB("admin");
@@ -652,7 +698,7 @@ public class Mongo {
          * @throws UnknownHostException
          */
         public Mongo connect( MongoURI uri )
-            throws MongoException , UnknownHostException {
+            throws UnknownHostException {
 
             String key = _toKey( uri );
 
@@ -690,9 +736,9 @@ public class Mongo {
 
     }
 
-    class DBCleanerThread extends Thread {
+    class CursorCleanerThread extends Thread {
 
-        DBCleanerThread() {
+        CursorCleanerThread() {
             setDaemon(true);
             setName("MongoCleaner" + hashCode());
         }

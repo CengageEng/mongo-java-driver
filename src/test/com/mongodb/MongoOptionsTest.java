@@ -18,7 +18,6 @@ package com.mongodb;
 
 import org.testng.annotations.Test;
 
-import com.mongodb.ReplicaSetStatus.Node;
 import com.mongodb.util.TestCase;
 
 /**
@@ -50,6 +49,8 @@ public class MongoOptionsTest extends TestCase {
         options.dbEncoderFactory = null;
         options.socketFactory = null;
         options.description = "cool";
+        options.readPreference = ReadPreference.secondary();
+        options.cursorFinalizerEnabled = true;
 
         final MongoOptions copy = options.copy();
         assertEquals(options.connectionsPerHost, copy.connectionsPerHost);
@@ -70,6 +71,54 @@ public class MongoOptionsTest extends TestCase {
         assertEquals(options.dbEncoderFactory, copy.dbEncoderFactory);
         assertEquals(options.socketFactory, copy.socketFactory);
         assertEquals(options.description, copy.description);
+        assertEquals(options.readPreference, copy.readPreference);
+        assertEquals(options.cursorFinalizerEnabled, copy.cursorFinalizerEnabled);
+    }
+    
+    @Test
+    public void testGetterSetters() throws Exception {
+
+        final MongoOptions options = new MongoOptions();
+
+        options.setConnectionsPerHost(100);
+        options.setThreadsAllowedToBlockForConnectionMultiplier(101);
+        options.setMaxWaitTime(102);
+        options.setConnectTimeout(103);
+        options.setSocketTimeout(104);
+        options.setSocketKeepAlive(true);
+        options.setAutoConnectRetry(true);
+        options.setMaxAutoConnectRetryTime(105);
+        options.setSafe(true);
+        options.setW(106);
+        options.setWtimeout(107);
+        options.setFsync(true);
+        options.setJ(false);
+        options.setDbDecoderFactory(null);
+        options.setDbEncoderFactory(null);
+        options.setSocketFactory(null);
+        options.setDescription("very cool");
+        options.setReadPreference(ReadPreference.secondary());
+        options.setCursorFinalizerEnabled(true);
+
+        assertEquals(options.getConnectionsPerHost(), 100);
+        assertEquals(options.getThreadsAllowedToBlockForConnectionMultiplier(), 101);
+        assertEquals(options.getMaxWaitTime(), 102);
+        assertEquals(options.getConnectTimeout(), 103);
+        assertEquals(options.getSocketTimeout(), 104);
+        assertEquals(options.isSocketKeepAlive(), true);
+        assertEquals(options.isAutoConnectRetry(), true);
+        assertEquals(options.getMaxAutoConnectRetryTime(), 105);
+        assertEquals(options.isSafe(), true);
+        assertEquals(options.getW(), 106);
+        assertEquals(options.getWtimeout(), 107);
+        assertEquals(options.isFsync(), true);
+        assertEquals(options.isJ(), false);
+        assertEquals(options.getDbDecoderFactory(), null);
+        assertEquals(options.getDbEncoderFactory(), null);
+        assertEquals(options.getSocketFactory(), null);
+        assertEquals(options.getDescription(), "very cool");
+        assertEquals(options.getReadPreference(), ReadPreference.secondary());
+        assertEquals(options.isCursorFinalizerEnabled(), true);
     }
 }
 
