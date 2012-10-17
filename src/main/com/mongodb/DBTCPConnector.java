@@ -54,7 +54,7 @@ public class DBTCPConnector implements DBConnector {
      * @throws MongoException
      */
     public DBTCPConnector( Mongo m , ServerAddress ... all ){
-        this( m , Arrays.asList( all ) );
+        this(m, Arrays.asList(all));
     }
 
     /**
@@ -140,7 +140,7 @@ public class DBTCPConnector implements DBConnector {
         CommandResult e = port.runCommand( db , concern.getCommand() );
 
         e.throwOnError();
-            return new WriteResult( e , concern );
+        return new WriteResult( e , concern );
     }
 
     /**
@@ -254,7 +254,7 @@ public class DBTCPConnector implements DBConnector {
     public Response call( DB db, DBCollection coll, OutMessage m, ServerAddress hostNeeded, int retries, ReadPreference readPref, DBDecoder decoder ){
 
         try {
-        if (readPref == null)
+            if (readPref == null)
                 readPref = ReadPreference.primary();
 
             if (readPref == ReadPreference.primary() && m.hasOption( Bytes.QUERYOPTION_SLAVEOK ))
@@ -262,22 +262,23 @@ public class DBTCPConnector implements DBConnector {
 
             boolean secondaryOk = !(readPref == ReadPreference.primary());
 
-        _checkClosed();
-        checkMaster( false, !secondaryOk );
+            _checkClosed();
+            if (!secondaryOk)
+            checkMaster( false, !secondaryOk );
 
-        final MyPort mp = _myPort.get();
-        final DBPort port = mp.get( false , readPref, hostNeeded );
+            final MyPort mp = _myPort.get();
+            final DBPort port = mp.get( false , readPref, hostNeeded );
 
-        Response res = null;
-        boolean retry = false;
-        try {
-            port.checkAuth( db );
+            Response res = null;
+            boolean retry = false;
+            try {
+                port.checkAuth( db );
                 res = port.call( m , coll, decoder );
-            if ( res._responseTo != m.getId() )
-                throw new MongoException( "ids don't match" );
-        }
-        catch ( IOException ioe ){
-            mp.error( port , ioe );
+                if ( res._responseTo != m.getId() )
+                    throw new MongoException( "ids don't match" );
+            }
+            catch ( IOException ioe ){
+                mp.error( port , ioe );
 
             // retry all commands in the case of socket timeout exceptions (obeying retry count)
             if( ioe instanceof SocketTimeoutException ){
@@ -288,34 +289,34 @@ public class DBTCPConnector implements DBConnector {
                 retry = retries > 0 && !coll._name.equals( "$cmd" ) && _error( ioe, secondaryOk );
             }
             
-            if ( !retry ){
-                throw new MongoException.Network( "can't call something : " + port.host() + "/" + db,
-                                                  ioe );
+                if ( !retry ){
+                    throw new MongoException.Network( "can't call something : " + port.host() + "/" + db,
+                                                      ioe );
+                }
             }
-        }
-        catch ( RuntimeException re ){
-            mp.error( port , re );
-            throw re;
-        } finally {
-            mp.done( port );
-        }
-
-        if (retry)
-            return call( db , coll , m , hostNeeded , retries - 1 , readPref, decoder );
-
-        ServerError err = res.getError();
-
-        if ( err != null && err.isNotMasterError() ){
-            checkMaster( true , true );
-            if ( retries <= 0 ){
-                throw new MongoException( "not talking to master and retries used up" );
+            catch ( RuntimeException re ){
+                mp.error( port , re );
+                throw re;
+            } finally {
+                mp.done( port );
             }
-            return call( db , coll , m , hostNeeded , retries -1, readPref, decoder );
-        }
+
+            if (retry)
+                return call( db , coll , m , hostNeeded , retries - 1 , readPref, decoder );
+
+            ServerError err = res.getError();
+
+            if ( err != null && err.isNotMasterError() ){
+                checkMaster( true , true );
+                if ( retries <= 0 ){
+                    throw new MongoException( "not talking to master and retries used up" );
+                }
+                return call( db , coll , m , hostNeeded , retries -1, readPref, decoder );
+            }
 
             return res;
         } finally {
-        m.doneWithMessage();
+            m.doneWithMessage();
         }
     }
 
@@ -432,16 +433,16 @@ public class DBTCPConnector implements DBConnector {
 
             DBPort p;
             if (getReplicaSetStatus() == null){
-            if (_masterPortPool == null) {
-                // this should only happen in rare case that no master was ever found
-                // may get here at startup if it's a read, slaveOk=true, and ALL servers are down
-                throw new MongoException("Rare case where master=null, probably all servers are down");
-            }
+                if (_masterPortPool == null) {
+                    // this should only happen in rare case that no master was ever found
+                    // may get here at startup if it's a read, slaveOk=true, and ALL servers are down
+                    throw new MongoException("Rare case where master=null, probably all servers are down");
+                }
                 p = _masterPortPool.get();
             }
             else {
                 ConnectionStatus.Node node = readPref.getNode(getReplicaSetStatus()._replicaSetHolder.get());
-
+            
                 if (node == null)
                     throw new MongoException("No replica set members available for query with "+readPref.toDBObject().toString());
             
@@ -596,8 +597,8 @@ public class DBTCPConnector implements DBConnector {
         _closed.set( true );
         if ( _portHolder != null ) {
             try {
-            _portHolder.close();
-            _portHolder = null;
+                _portHolder.close();
+                _portHolder = null;
             } catch (final Throwable t) { /* nada */ }
         }
         if ( _connectionStatus != null ) {
