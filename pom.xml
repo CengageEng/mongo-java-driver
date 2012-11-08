@@ -6,13 +6,13 @@
 
     <groupId>mongo-java-driver</groupId>
     <artifactId>mongo</artifactId>
-    <version>2.9.1.1-CENGAGE</version>
+    <version>2.10.0-CENGAGE</version>
     <packaging>jar</packaging>
     <name>mongo-java-driver</name>
     <properties>
-        <build.conf.lib.version>2.7.0-rc3-CENGAGE</build.conf.lib.version>
+        <build.conf.lib.version>2.10.0-CENGAGE</build.conf.lib.version>
         <build.conf.lib.major>2</build.conf.lib.major>
-        <build.conf.lib.minor>7</build.conf.lib.minor>
+        <build.conf.lib.minor>10</build.conf.lib.minor>
     </properties>
     <distributionManagement>
         <!-- repo for artifact distribution -->
@@ -29,7 +29,7 @@
         </snapshotRepository>
     </distributionManagement>
     <build>
-      <sourceDirectory>src/main</sourceDirectory>
+        <sourceDirectory>src/main</sourceDirectory>
         <testSourceDirectory>src/test</testSourceDirectory>
         <plugins>
             <plugin>
@@ -59,7 +59,7 @@
                 </configuration>
             </plugin>
         </plugins>
-</build>
+    </build>
 
     <dependencies>
         <dependency>

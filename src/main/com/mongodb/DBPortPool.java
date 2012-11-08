@@ -36,19 +36,16 @@ import java.util.logging.Level;
 /**
  * This class is NOT part of the public API.  Be prepared for non-binary compatible changes in minor releases.
  */
-public class DBPortPool extends SimplePool<DBPort> implements MongoConnectionPoolMXBean {
+public class DBPortPool extends SimplePool<DBPort> {
 
-    @Override
     public String getHost() {
         return _addr.getHost();
     }
 
-    @Override
     public int getPort() {
         return _addr.getPort();
     }
 
-    @Override
     public synchronized ConnectionPoolStatisticsBean getStatistics() {
         return new ConnectionPoolStatisticsBean(getTotal(), getInUse(), getInUseConnections());
     }
@@ -64,42 +61,53 @@ public class DBPortPool extends SimplePool<DBPort> implements MongoConnectionPoo
 
 
     static class Holder {
-        
+
         Holder( MongoOptions options ){
             _options = options;
-                }
-                
+        }
+
         DBPortPool get( ServerAddress addr ){
-            
+
             DBPortPool p = _pools.get( addr );
-            
-            if (p != null) 
+
+            if (p != null)
                 return p;
-            
+
             synchronized (_pools) {
                 p = _pools.get( addr );
                 if (p != null) {
                     return p;
                 }
-                
-                p = new DBPortPool( addr , _options );
+
+                p = createPool(addr);
                 _pools.put( addr , p);
 
-                    try {
+                try {
                     String on = createObjectName(addr);
                     if (MBeanServerFactory.getMBeanServer().isRegistered(on)) {
                         MBeanServerFactory.getMBeanServer().unregisterMBean(on);
-                            Bytes.LOGGER.log( Level.INFO , "multiple Mongo instances for same host, jmx numbers might be off" );
-                        }
+                        Bytes.LOGGER.log(Level.INFO, "multiple Mongo instances for same host, jmx numbers might be off");
+                    }
                     MBeanServerFactory.getMBeanServer().registerMBean(p, on);
                 } catch (JMException e) {
-                        Bytes.LOGGER.log( Level.WARNING , "jmx registration error: " + e + " continuing..." );
+                    Bytes.LOGGER.log(Level.WARNING, "JMX registration error: " + e +
+                            "\nConsider setting com.mongodb.MongoOptions.alwaysUseMBeans property to true." +
+                            "\nContinuing...");
                 } catch (java.security.AccessControlException e) {
-                        Bytes.LOGGER.log( Level.WARNING , "jmx registration error: " + e + " continuing..." );
-                    }
+                    Bytes.LOGGER.log(Level.WARNING, "JMX registration error: " + e +
+                            "\nContinuing...");
                 }
+            }
 
             return p;
+        }
+
+        private DBPortPool createPool(final ServerAddress addr) {
+            if (isJava5) {
+                return new Java5MongoConnectionPool(addr, _options);
+            } else {
+                return new MongoConnectionPool(addr, _options);
+            }
         }
 
         void close(){
@@ -126,24 +134,29 @@ public class DBPortPool extends SimplePool<DBPort> implements MongoConnectionPoo
             return name;
         }
 
+        static {
+            isJava5 = System.getProperty("java.version").startsWith("1.5");
+        }
+
         final MongoOptions _options;
         final Map<ServerAddress,DBPortPool> _pools = Collections.synchronizedMap( new HashMap<ServerAddress,DBPortPool>() );
         final int _serial = nextSerial.incrementAndGet();
 
         // we use this to give each Holder a different mbean name
         static AtomicInteger nextSerial = new AtomicInteger(0);
+        static final boolean isJava5;
     }
 
     // ----
-    
+
     public static class NoMoreConnection extends MongoInternalException {
         private static final long serialVersionUID = -4415279469780082174L;
-	
+
         NoMoreConnection( String msg ){
 	        super( msg );
 	    }
     }
-    
+
     public static class SemaphoresOut extends NoMoreConnection {
         private static final long serialVersionUID = -4415279469780082174L;
         private static final String message = "Concurrent requests for database connection have exceeded limit";
@@ -164,7 +177,7 @@ public class DBPortPool extends SimplePool<DBPort> implements MongoConnectionPoo
     }
 
     // ----
-    
+
     DBPortPool( ServerAddress addr , MongoOptions options ){
         super( "DBPortPool-" + addr.toString() + ", options = " +  options.toString() , options.connectionsPerHost );
         _options = options;
@@ -186,13 +199,13 @@ public class DBPortPool extends SimplePool<DBPort> implements MongoConnectionPoo
 
         return couldCreate ? -1 : recommended;
     }
-    
+
     /**
      * @return
      * @throws MongoException
      */
     @Override
-    public DBPort get(){
+    public DBPort get() {
         DBPort port = null;
         if ( ! _waitingSem.tryAcquire() )
             throw new SemaphoresOut(_waitingSem.availablePermits() );
@@ -207,8 +220,8 @@ public class DBPortPool extends SimplePool<DBPort> implements MongoConnectionPoo
 
         if ( port == null )
             throw new ConnectionWaitTimeOut( _options.maxWaitTime );
-        
-            port._lastThread = System.identityHashCode(Thread.currentThread());
+
+        port._lastThread = System.identityHashCode(Thread.currentThread());
         return port;
     }
 
@@ -219,7 +232,7 @@ public class DBPortPool extends SimplePool<DBPort> implements MongoConnectionPoo
             // so usually doesn't mean there is a real db problem
             return true;
         }
-        
+
         if ( e instanceof InterruptedIOException){
             // we don't want to clear the port pool for a connection timing out or interrupted
             return true;
@@ -232,15 +245,15 @@ public class DBPortPool extends SimplePool<DBPort> implements MongoConnectionPoo
         List<DBPort> all = new ArrayList<DBPort>();
         while ( true ){
             try {
-            DBPort temp = get(0);
-            if ( temp == null )
-                break;
-            all.add( temp );
+                DBPort temp = get(0);
+                if ( temp == null )
+                    break;
+                all.add( temp );
             } catch (InterruptedException interruptedException) {
                 throw new MongoInterruptedException(interruptedException);
+            }
         }
-        }
-        
+
         for ( DBPort p : all ){
             p.close();
             done(p);

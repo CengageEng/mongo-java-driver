@@ -251,9 +251,18 @@ public class DBTCPConnector implements DBConnector {
      * @throws MongoException
      */
     @Override
-    public Response call( DB db, DBCollection coll, OutMessage m, ServerAddress hostNeeded, int retries, ReadPreference readPref, DBDecoder decoder ){
-
+    public Response call( DB db, DBCollection coll, OutMessage m, ServerAddress hostNeeded, int retries,
+                          ReadPreference readPref, DBDecoder decoder ){
         try {
+            return innerCall(db, coll, m, hostNeeded, retries, readPref, decoder);
+        } finally {
+            m.doneWithMessage();
+        }
+    }
+
+    // This method is recursive.  It calls itself to implement query retry logic.
+    private Response innerCall(final DB db, final DBCollection coll, final OutMessage m, final ServerAddress hostNeeded,
+                               final int retries, ReadPreference readPref, final DBDecoder decoder) {
             if (readPref == null)
                 readPref = ReadPreference.primary();
 
@@ -263,8 +272,9 @@ public class DBTCPConnector implements DBConnector {
             boolean secondaryOk = !(readPref == ReadPreference.primary());
 
             _checkClosed();
-            if (!secondaryOk)
-            checkMaster( false, !secondaryOk );
+        // Don't check master on secondary reads unless connected to a replica set
+        if (!secondaryOk || getReplicaSetStatus() == null)
+                checkMaster( false, !secondaryOk );
 
             final MyPort mp = _myPort.get();
             final DBPort port = mp.get( false , readPref, hostNeeded );
@@ -302,7 +312,7 @@ public class DBTCPConnector implements DBConnector {
             }
 
             if (retry)
-                return call( db , coll , m , hostNeeded , retries - 1 , readPref, decoder );
+            return innerCall( db , coll , m , hostNeeded , retries - 1 , readPref, decoder );
 
             ServerError err = res.getError();
 
@@ -311,13 +321,10 @@ public class DBTCPConnector implements DBConnector {
                 if ( retries <= 0 ){
                     throw new MongoException( "not talking to master and retries used up" );
                 }
-                return call( db , coll , m , hostNeeded , retries -1, readPref, decoder );
+            return innerCall( db , coll , m , hostNeeded , retries -1, readPref, decoder );
             }
 
             return res;
-        } finally {
-            m.doneWithMessage();
-        }
     }
 
     public ServerAddress getAddress(){
